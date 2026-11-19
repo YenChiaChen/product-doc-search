@@ -1,0 +1,1096 @@
+<title>文件搜尋系統</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: 左側導覽 + 頂部標題列 + 內容區；手機改底部導覽，文件詳情是右側抽屜／底部抽屜。琥珀＝結構化篩選，青綠＝語意向量 */
+:root {
+  --bg: #f6f6f7; --side: #fafafa; --surface: #ffffff; --surface2: #fafafb; --hover: #f5f6f8; --code: #f6f6f7;
+  --line: #e4e4e7; --line2: #d4d4d8; --line3: #efeff1; --track: #ececef;
+  --text: #18181b; --t2: #3f3f46; --t3: #52525b; --muted: #6b6b74; --dim: #86868f; --dim2: #a1a1aa;
+  --acc: #2449c2; --acc-h: #1c3a9e; --acc-p: #173086; --acc-soft: #edf1fc; --on-acc: #ffffff; --sel: #dbe3fa;
+  --f: oklch(0.55 0.12 62); --f-soft: oklch(0.965 0.03 80); --f-line: oklch(0.78 0.08 70);
+  --v: oklch(0.53 0.09 185); --v-soft: oklch(0.94 0.035 180); --v-bg: oklch(0.975 0.015 180); --v-line: oklch(0.86 0.05 180);
+  --ok: oklch(0.62 0.13 150); --glass: rgba(255,255,255,.88); --glass2: rgba(255,255,255,.95); --scrim: rgba(24,24,27,.24);
+  --font: Inter, "Noto Sans TC", system-ui, -apple-system, "PingFang TC", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #111113; --side: #151517; --surface: #1b1b1e; --surface2: #202024; --hover: #26262b; --code: #151517;
+  --line: #2c2c31; --line2: #3a3a41; --line3: #25252a; --track: #2c2c31;
+  --text: #ececef; --t2: #d2d2d7; --t3: #b6b6bd; --muted: #9a9aa3; --dim: #7a7a83; --dim2: #5f5f67;
+  --acc: #7d97ff; --acc-h: #a6b7ff; --acc-p: #c2cfff; --acc-soft: #1f2741; --on-acc: #0c1330; --sel: #2a3566;
+  --f: oklch(0.79 0.12 72); --f-soft: oklch(0.29 0.05 70); --f-line: oklch(0.5 0.08 70);
+  --v: oklch(0.79 0.1 185); --v-soft: oklch(0.31 0.05 185); --v-bg: oklch(0.23 0.03 185); --v-line: oklch(0.42 0.06 185);
+  --ok: oklch(0.72 0.14 150); --glass: rgba(27,27,30,.86); --glass2: rgba(27,27,30,.94); --scrim: rgba(0,0,0,.5);
+  color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --bg: #111113; --side: #151517; --surface: #1b1b1e; --surface2: #202024; --hover: #26262b; --code: #151517;
+  --line: #2c2c31; --line2: #3a3a41; --line3: #25252a; --track: #2c2c31;
+  --text: #ececef; --t2: #d2d2d7; --t3: #b6b6bd; --muted: #9a9aa3; --dim: #7a7a83; --dim2: #5f5f67;
+  --acc: #7d97ff; --acc-h: #a6b7ff; --acc-p: #c2cfff; --acc-soft: #1f2741; --on-acc: #0c1330; --sel: #2a3566;
+  --f: oklch(0.79 0.12 72); --f-soft: oklch(0.29 0.05 70); --f-line: oklch(0.5 0.08 70);
+  --v: oklch(0.79 0.1 185); --v-soft: oklch(0.31 0.05 185); --v-bg: oklch(0.23 0.03 185); --v-line: oklch(0.42 0.06 185);
+  --ok: oklch(0.72 0.14 150); --glass: rgba(27,27,30,.86); --glass2: rgba(27,27,30,.94); --scrim: rgba(0,0,0,.5);
+  color-scheme: dark;
+}
+*, *::before, *::after { box-sizing: border-box; }
+html, body { background: var(--bg); color: var(--text); font-family: var(--font); font-size: 15px; line-height: 1.55; -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 25; background: var(--glass2); }
+button, input { font: inherit; color: inherit; }
+input::placeholder { color: var(--dim); }
+:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
+::selection { background: var(--sel); }
+.mono { font-family: var(--mono); }
+.ic { width: 1em; height: 1em; flex: none; display: block; }
+.badge { flex: none; padding: 1px 7px; border-radius: 4px; background: var(--acc-soft); color: var(--acc-h); font-size: 11.5px; white-space: nowrap; }
+mark { background: var(--v-soft); color: var(--v); padding: 0 2px; border-radius: 3px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+.stack { display: flex; flex-direction: column; }
+.empty { padding: 32px 16px; text-align: center; color: var(--muted); font-size: 14px; border: 1px dashed var(--line2); border-radius: 8px; }
+.ghost { border: 1px solid var(--line2); background: transparent; color: var(--t3); cursor: pointer; border-radius: 7px; transition: border-color .15s, color .15s; }
+.ghost:hover { border-color: var(--acc); color: var(--acc-h); }
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.tab { flex: none; display: flex; align-items: center; gap: 6px; height: 36px; padding: 0 10px; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; background: transparent; color: var(--muted); font-size: 13px; cursor: pointer; transition: color .15s, border-color .2s; }
+.tab.on { color: var(--text); border-bottom-color: var(--acc); }
+.tab .n { font-family: var(--mono); font-size: 10.5px; color: var(--dim); }
+.tab.on .n { color: var(--acc); }
+
+/* shell */
+.app { display: flex; min-height: 100vh; background: var(--bg); }
+.side { width: 232px; flex: none; position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; gap: 20px; padding: calc(18px + env(safe-area-inset-top, 0px)) 12px 18px max(12px, env(safe-area-inset-left, 0px)); border-right: 1px solid var(--line); background: var(--side); }
+.brand { display: flex; align-items: center; gap: 10px; padding: 2px 8px; }
+.logo { width: 28px; height: 28px; border-radius: 6px; background: var(--text); color: var(--bg); display: grid; place-items: center; font-size: 16px; flex: none; }
+.brand b { display: block; font-weight: 600; font-size: 14px; line-height: 1.25; }
+.brand small { display: block; font-size: 11.5px; color: var(--muted); line-height: 1.25; }
+.snav { display: flex; flex-direction: column; gap: 2px; }
+.snav button { display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; text-align: left; font-size: 14px; font-weight: 500; transition: background .15s, color .15s; }
+.snav button:hover { color: var(--text); }
+.snav button .ic { font-size: 18px; color: var(--dim); transition: color .15s; }
+.snav button span { flex: 1; }
+.snav button small { font-family: var(--mono); font-size: 11px; color: var(--dim); }
+.snav button.on { background: var(--acc-soft); color: var(--acc-h); }
+.snav button.on .ic { color: var(--acc); }
+.sidefoot { margin-top: auto; padding: 10px; border-radius: 8px; background: var(--hover); font-size: 12px; color: var(--muted); display: flex; flex-direction: column; gap: 6px; }
+.sidefoot .live { display: flex; align-items: center; gap: 6px; color: var(--t2); }
+.sidefoot .live::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--ok); }
+.kbd { font-family: var(--mono); font-size: 11px; border: 1px solid var(--line2); border-radius: 4px; padding: 0 5px; }
+.col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; display: flex; align-items: center; gap: 12px; min-height: 58px; padding-block: 10px; padding-left: max(28px, env(safe-area-inset-left, 0px)); padding-right: max(28px, env(safe-area-inset-right, 0px)); background: var(--glass); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); }
+.top .logo { display: none; }
+.top .tt { display: flex; flex-direction: column; min-width: 0; line-height: 1.3; }
+.top h1 { margin: 0; font-size: 17px; font-weight: 500; letter-spacing: -.01em; }
+.top .tt span { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+main { flex: 1; max-width: 1360px; width: 100%; padding-block: 28px 48px; padding-left: max(28px, env(safe-area-inset-left, 0px)); padding-right: max(28px, env(safe-area-inset-right, 0px)); }
+.bnav { display: none; }
+
+/* search */
+.sform { display: flex; flex-direction: column; gap: 12px; padding: 14px; }
+.srow { display: flex; gap: 8px; }
+.sfield { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; height: 46px; padding: 0 14px; border-radius: 6px; background: var(--surface); border: 1px solid var(--line2); transition: border-color .15s; font-size: 18px; color: var(--muted); }
+.sfield:focus-within { border-color: var(--acc); }
+.sfield input { flex: 1; min-width: 0; border: 0; background: transparent; outline: none; font-size: 16px; color: var(--text); }
+.sbtn { flex: none; height: 46px; padding: 0 18px; border-radius: 6px; border: 1px solid var(--acc); background: var(--acc); color: var(--on-acc); font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: background .15s; font-size: 15px; }
+.sbtn:hover { background: var(--acc-h); border-color: var(--acc-h); }
+.sbtn:active { background: var(--acc-p); }
+.chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; overflow-x: auto; margin: 0 -2px; padding: 2px; }
+.chips > span { font-size: 12px; color: var(--dim); flex: none; margin-right: 2px; }
+.chip { flex: none; height: 28px; padding: 0 11px; border-radius: 4px; border: 1px solid var(--line2); background: transparent; color: var(--t2); font-size: 12.5px; cursor: pointer; white-space: nowrap; transition: all .15s; }
+.chip:hover { border-color: var(--acc); color: var(--acc-h); }
+.chip.on { border-color: var(--acc); background: var(--acc-soft); color: var(--acc-h); }
+.chip small { font-family: var(--mono); font-size: 11px; opacity: .7; margin-left: 6px; }
+.funnel { display: flex; flex-direction: column; gap: 12px; padding: 14px; }
+.pills { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pills .lead { font-size: 12.5px; color: var(--muted); margin-right: 4px; }
+.pills .lead b { font-family: var(--mono); font-size: 11px; color: var(--dim); font-weight: 400; margin-right: 8px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 6px; font-size: 12.5px; max-width: 100%; }
+.pill i { font-style: normal; opacity: .8; font-size: 11.5px; flex: none; }
+.pill span { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pill.f { background: var(--f-soft); color: var(--f); }
+.pill.v { background: var(--v-soft); color: var(--v); }
+.pill.x { background: var(--track); color: var(--muted); }
+.fbar { position: relative; height: 8px; border-radius: 4px; background: var(--track); overflow: hidden; }
+.fbar div { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; transition: width .6s cubic-bezier(.2,.8,.2,1); }
+.fbar .bf { background: var(--f); }
+.fbar .bv { background: var(--v); transition-delay: .1s; }
+.fstats { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 12.5px; color: var(--muted); align-items: baseline; }
+.fstats > span { display: flex; align-items: baseline; gap: 6px; }
+.fstats b { font-family: var(--mono); font-size: 15px; font-weight: 500; color: var(--text); }
+.fstats .sw { width: 8px; height: 8px; border-radius: 2px; align-self: center; }
+.fstats .kf b { color: var(--f); } .fstats .kf .sw { background: var(--f); }
+.fstats .kv b { color: var(--v); } .fstats .kv .sw { background: var(--v); }
+.fstats .kw { flex-basis: 100%; font-size: 12px; color: var(--dim); display: block; }
+.fstats .kw code { font-family: var(--mono); color: var(--t3); }
+.split { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; }
+.results { flex: 1 1 460px; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.rhead { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 0 2px; }
+.rhead h2 { margin: 0; font-size: 13px; font-weight: 500; color: var(--muted); }
+.rhead h2 b { color: var(--text); font-family: var(--mono); margin-left: 4px; font-weight: 500; }
+.rhead span { font-size: 12px; color: var(--dim); }
+.list { display: flex; flex-direction: column; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.ritem { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 14px; padding: 13px 14px; background: var(--surface); cursor: pointer; transition: background .15s; }
+.ritem:hover { background: var(--hover); }
+.rmain { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.rmeta { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); min-width: 0; }
+.rmeta .mono { flex: none; font-size: 11.5px; }
+.rpath { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--f); }
+.rmore { flex: none; color: var(--dim); }
+.ritem h3 { margin: 0; font-size: 15px; font-weight: 500; line-height: 1.4; text-wrap: pretty; }
+.rsnip { margin: 0; font-size: 13.5px; color: var(--t3); line-height: 1.6; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.rscore { width: 56px; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; padding-top: 1px; }
+.rscore b { font-family: var(--mono); font-size: 15px; font-weight: 500; color: var(--v); }
+.sbar { width: 100%; height: 3px; border-radius: 2px; background: var(--track); overflow: hidden; }
+.sbar div { height: 100%; background: var(--v); }
+.rscore small { font-size: 10.5px; color: var(--dim); }
+.lowbtn { display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 12px; border-radius: 6px; border: 1px dashed var(--line2); background: transparent; color: var(--muted); font-size: 13px; cursor: pointer; transition: all .15s; }
+.lowbtn:hover { color: var(--text); border-color: var(--dim2); }
+.lowbtn .ic { font-size: 13px; transition: transform .2s; }
+.lowbtn.on .ic { transform: rotate(90deg); }
+.lowbtn small { font-family: var(--mono); font-size: 12px; color: var(--dim); }
+.litem { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 14px; padding: 11px 14px; background: var(--surface2); cursor: pointer; transition: background .15s; }
+.litem:hover { background: var(--hover); }
+.litem .m { display: flex; gap: 8px; font-size: 11.5px; color: var(--dim); }
+.litem .t { font-size: 14px; color: var(--t3); }
+.litem > b { font-family: var(--mono); font-size: 13px; color: var(--dim); font-weight: 400; }
+.ins { flex: 1 1 340px; max-width: 400px; min-width: 0; position: sticky; top: calc(72px + env(safe-area-inset-top, 0px)); display: flex; flex-direction: column; overflow: hidden; }
+.ins-h { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border: 0; background: transparent; cursor: default; text-align: left; font-size: 16px; color: var(--muted); }
+.ins-h span { flex: 1; font-size: 13px; font-weight: 500; color: var(--text); }
+.ins-h .chev { display: none; font-size: 14px; transition: transform .2s; }
+.ins .tabs { padding: 0 10px; }
+.ins-b { padding: 14px; display: flex; flex-direction: column; gap: 12px; max-height: calc(100vh - 210px); overflow: auto; }
+.note { margin: 0; font-size: 13px; color: var(--muted); text-wrap: pretty; }
+.note.s { font-size: 12px; color: var(--dim); }
+.itree { display: flex; flex-direction: column; gap: 1px; }
+.itree div { display: flex; align-items: center; gap: 7px; height: 26px; padding-right: 8px; border-radius: 5px; font-size: 13px; color: var(--dim); }
+.itree div::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--line2); flex: none; }
+.itree div span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.itree div small { font-family: var(--mono); font-size: 10.5px; color: var(--dim); margin-left: auto; flex: none; }
+.itree .in { color: var(--text); } .itree .in::before { background: var(--f); }
+.itree .hit { color: var(--f); background: var(--f-soft); font-weight: 600; }
+.sql { padding: 12px; border-radius: 8px; background: var(--code); overflow-x: auto; font-family: var(--mono); font-size: 12px; line-height: 1.7; color: var(--t3); }
+.sql div { white-space: pre; }
+.sql .f { color: var(--f); } .sql .v { color: var(--v); }
+.vgrid { display: grid; grid-template-columns: auto minmax(0,1fr) 36px; gap: 7px 10px; align-items: center; font-size: 12.5px; }
+.vgrid > span { white-space: nowrap; color: var(--dim); }
+.vgrid > span.on { color: var(--text); }
+.vgrid .tr { height: 6px; border-radius: 3px; background: var(--track); overflow: hidden; }
+.vgrid .tr div { height: 100%; background: var(--v); border-radius: 3px; }
+.vgrid .val { font-family: var(--mono); font-size: 11px; text-align: right; }
+
+/* docs */
+.tools { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.filter { flex: 1 1 240px; display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 12px; border-radius: 9px; background: var(--surface); border: 1px solid var(--line); font-size: 16px; color: var(--muted); }
+.filter:focus-within { border-color: var(--acc); }
+.filter input { flex: 1; min-width: 0; border: 0; background: transparent; outline: none; font-size: 14px; color: var(--text); }
+.seg { display: flex; gap: 2px; padding: 3px; border-radius: 9px; background: var(--surface); border: 1px solid var(--line); }
+.seg button { height: 30px; padding: 0 12px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 13px; cursor: pointer; transition: all .15s; }
+.seg button.on { background: var(--track); color: var(--text); }
+.chips.types .chip { height: 30px; padding: 0 12px; font-size: 13px; }
+.dtable { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--surface); }
+.dhead, .drow { display: grid; grid-template-columns: minmax(0,1fr) 88px minmax(0,240px) 100px 52px; gap: 16px; padding: 0 16px; align-items: center; }
+.dhead { height: 38px; font-size: 12px; color: var(--dim); background: var(--surface2); border-bottom: 1px solid var(--line); }
+.dhead span:last-child, .d-ch { text-align: right; }
+.drow { min-height: 46px; font-size: 13.5px; border-bottom: 1px solid var(--line3); cursor: pointer; transition: background .15s; }
+.drow:last-child { border-bottom: 0; }
+.drow:hover { background: var(--hover); }
+.d-title { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.d-path { color: var(--muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.d-path small { color: var(--dim); font-size: 12.5px; }
+.d-date { font-family: var(--mono); font-size: 12px; color: var(--t3); }
+.d-ch { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.d-ch i { font-style: normal; display: none; }
+.foot { font-size: 12px; color: var(--dim); padding: 0 2px; }
+
+/* tree */
+.tbox { flex: 1 1 340px; min-width: 0; overflow: hidden; }
+.tbox-h { display: flex; align-items: center; gap: 8px; padding: 10px 12px 10px 16px; border-bottom: 1px solid var(--line); }
+.tbox-h > span { flex: 1; font-size: 13px; color: var(--muted); }
+.tbox-h > small { font-size: 12px; color: var(--dim); margin-right: 6px; }
+.icbtn { width: 30px; height: 30px; display: grid; place-items: center; font-size: 15px; padding: 0; }
+.trows { padding: 6px; display: flex; flex-direction: column; gap: 1px; }
+.trow { display: flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 10px 0 var(--pad); border-radius: 7px; color: var(--t2); cursor: pointer; font-size: 13.5px; transition: background .15s; }
+.trow:hover { background: var(--hover); }
+.trow.root { color: var(--text); }
+.trow.root .nm { font-weight: 500; }
+.trow.sel { background: var(--acc-soft); color: var(--acc-h); }
+.tog { width: 22px; height: 22px; flex: none; display: grid; place-items: center; border-radius: 5px; color: var(--muted); font-size: 12px; }
+.tog:hover { background: var(--track); }
+.tog .ic { transition: transform .2s; }
+.trow.open .tog .ic { transform: rotate(90deg); }
+.tog.none { visibility: hidden; }
+.nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kd { font-family: var(--mono); font-size: 10.5px; color: var(--dim); flex: none; }
+.cnt { margin-left: auto; font-family: var(--mono); font-size: 12px; color: var(--t3); flex: none; }
+.cnt.z { color: var(--dim2); }
+.ndet { flex: 1 1 360px; min-width: 0; position: sticky; top: calc(72px + env(safe-area-inset-top, 0px)); display: flex; flex-direction: column; gap: 14px; padding: 18px; }
+.crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: 12.5px; color: var(--muted); }
+.crumbs button { border: 0; background: transparent; padding: 0; color: var(--muted); cursor: pointer; font-size: 12.5px; }
+.crumbs button:hover { color: var(--acc-h); }
+.crumbs .ic { font-size: 10px; color: var(--dim2); }
+.ntitle { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ntitle h2 { margin: 0; font-size: 22px; font-weight: 500; letter-spacing: -.015em; }
+.tagb { padding: 1px 8px; border-radius: 4px; border: 1px solid var(--line2); font-size: 12px; color: var(--t3); }
+.ntitle small { font-family: var(--mono); font-size: 11.5px; color: var(--dim); }
+.stats3 { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 1px; background: var(--line); border-radius: 6px; overflow: hidden; }
+.stats3 div { padding: 10px 12px; background: var(--surface2); display: flex; flex-direction: column; gap: 2px; }
+.stats3 b { font-family: var(--mono); font-size: 20px; font-weight: 500; }
+.stats3 b.f { color: var(--f); }
+.stats3 span { font-size: 12px; color: var(--muted); }
+.mini { display: flex; flex-direction: column; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.mitem { display: flex; flex-direction: column; gap: 3px; padding: 10px 12px; background: var(--surface); cursor: pointer; transition: background .15s; }
+.mitem:hover { background: var(--hover); }
+.mitem .m { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--muted); }
+.mitem .via { margin-left: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--t3); }
+.mitem .via.f { color: var(--f); }
+.mitem .t { font-size: 14px; font-weight: 500; }
+
+/* schema */
+.schemas { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; }
+.sch { overflow: hidden; }
+.sch-h { display: flex; align-items: baseline; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+.sch-h b { font-family: var(--mono); font-size: 14px; font-weight: 500; }
+.sch-h span { font-size: 12.5px; color: var(--muted); }
+.sch-h small { margin-left: auto; font-family: var(--mono); font-size: 11.5px; color: var(--dim); }
+.sch dl { margin: 0; padding: 6px 0; display: grid; grid-template-columns: 96px 1fr; }
+.sch dt { padding: 5px 0 5px 14px; font-family: var(--mono); font-size: 12.5px; }
+.sch dd { margin: 0; padding: 5px 14px 5px 10px; font-size: 12.5px; color: var(--muted); }
+.sch dt.pk { color: var(--acc-h); } .sch dt.pk sup { font-size: 10px; color: var(--acc); vertical-align: baseline; margin-left: 3px; }
+.sch dt.fk { color: var(--f); } .sch dt.vk { color: var(--v); }
+.sch p { margin: 0 14px 10px; font-size: 12.5px; color: var(--muted); text-wrap: pretty; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 11.5px; color: var(--muted); }
+.legend b { font-family: var(--mono); color: var(--dim); font-weight: 400; }
+.tscroll { border: 1px solid var(--line); border-radius: 8px; overflow: auto; max-height: 560px; background: var(--surface); }
+.tgrid { display: grid; gap: 14px; padding: 8px 14px; align-items: center; border-bottom: 1px solid var(--line3); font-size: 12.5px; }
+.tgrid.h { position: sticky; top: 0; z-index: 1; height: 36px; padding-block: 0; background: var(--surface2); border-bottom-color: var(--line); font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+.tgrid > span { min-width: 0; overflow-wrap: anywhere; color: var(--t2); }
+.tgrid .c-m { font-family: var(--mono); } .tgrid .c-f { color: var(--f); } .tgrid .c-d { color: var(--muted); } .tgrid .c-x { color: var(--dim); }
+.heat { display: flex; gap: 2px; }
+.heat i { width: 10px; height: 16px; border-radius: 2px; background: var(--v); }
+.morebtn { align-self: flex-start; height: 34px; padding: 0 14px; font-size: 13px; }
+
+/* drawer */
+.scrim { position: fixed; inset: 0; z-index: 40; background: var(--scrim); opacity: 0; pointer-events: none; transition: opacity .3s ease; }
+.scrim.on { opacity: 1; pointer-events: auto; }
+.drawer { position: fixed; z-index: 41; top: 0; right: 0; bottom: 0; width: min(540px, 100vw); display: flex; flex-direction: column; background: var(--surface); border-left: 1px solid var(--line2); box-shadow: 0 12px 32px rgba(24,24,27,.10); transform: translate(105%, 0); transition: transform .38s cubic-bezier(.2,.8,.2,1); visibility: hidden; padding-top: env(safe-area-inset-top, 0px); }
+.drawer.on { transform: translate(0, 0); visibility: visible; }
+.grip { display: none; width: 36px; height: 4px; border-radius: 2px; background: var(--line2); margin: 8px auto 0; flex: none; }
+.dw-h { padding: 14px max(18px, env(safe-area-inset-right, 0px)) 0 18px; display: flex; flex-direction: column; gap: 8px; flex: none; }
+.dw-meta { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.dw-meta .x { margin-left: auto; width: 32px; height: 32px; display: grid; place-items: center; font-size: 15px; padding: 0; border-radius: 8px; }
+.dw-h h2 { margin: 0; font-size: 19px; font-weight: 500; line-height: 1.35; letter-spacing: -.01em; text-wrap: pretty; }
+.dw-h .tabs { margin: 4px -18px 0; padding: 0 12px; overflow: visible; }
+.dw-h .tab { height: 38px; }
+.dw-b { flex: 1; overflow: auto; padding: 16px max(18px, env(safe-area-inset-right, 0px)) calc(28px + env(safe-area-inset-bottom, 0px)) 18px; display: flex; flex-direction: column; gap: 16px; -webkit-overflow-scrolling: touch; }
+.best { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border-radius: 6px; background: var(--v-bg); border: 1px solid var(--v-line); }
+.best small { font-size: 11.5px; color: var(--v); }
+.best p { margin: 0; font-size: 14px; line-height: 1.65; }
+.kv { display: grid; grid-template-columns: 84px minmax(0,1fr); gap: 10px 12px; font-size: 13.5px; }
+.kv > span:nth-child(odd) { color: var(--muted); }
+.kv .uri { font-family: var(--mono); font-size: 12.5px; overflow-wrap: anywhere; color: var(--acc); }
+.tagl { display: flex; flex-wrap: wrap; gap: 6px; }
+.tagl span { padding: 1px 8px; border-radius: 4px; border: 1px solid var(--line2); font-size: 12px; color: var(--t2); }
+.plinks { display: flex; flex-direction: column; gap: 8px; }
+.plinks > span { font-size: 12.5px; color: var(--muted); }
+.plink { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface2); font-size: 13px; color: var(--f); cursor: pointer; text-align: left; transition: border-color .15s; }
+.plink:hover { border-color: var(--f-line); }
+.plink .ic { font-size: 15px; } .plink span { flex: 1; min-width: 0; } .plink .ic:last-child { font-size: 13px; color: var(--dim); }
+.ck { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 6px; background: var(--surface2); border: 1px solid var(--line); }
+.ck.best-c { border-color: var(--v-line); }
+.ck-m { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--dim); font-family: var(--mono); }
+.ck-m b { margin-left: auto; font-weight: 400; }
+.ck.best-c .ck-m b { color: var(--v); }
+.ck p { margin: 0; font-size: 13.5px; line-height: 1.65; color: var(--t2); }
+.ck .heat i { flex: 1; max-width: 18px; height: 10px; }
+.raw { display: flex; flex-direction: column; gap: 6px; }
+.raw > span { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.raw pre { margin: 0; padding: 12px; border-radius: 8px; background: var(--code); font-family: var(--mono); font-size: 11.5px; line-height: 1.6; overflow-x: auto; color: var(--t2); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .reveal { animation: rise .35s cubic-bezier(.2,.8,.2,1) both; animation-delay: var(--d, 0ms); }
+  @keyframes rise { from { opacity: 0; transform: translateY(8px); } }
+}
+@media (prefers-reduced-motion: reduce) { .drawer, .scrim, .fbar div { transition: none; } }
+
+/* phone */
+@media (max-width: 859px) {
+  .side { display: none; }
+  .top { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .top .logo { display: grid; }
+  main { padding-block: 16px calc(100px + env(safe-area-inset-bottom, 0px)); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .bnav { display: grid; position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; grid-template-columns: repeat(4, 1fr); padding: 6px max(6px, env(safe-area-inset-right, 0px)) calc(6px + env(safe-area-inset-bottom, 0px)) max(6px, env(safe-area-inset-left, 0px)); background: var(--glass2); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-top: 1px solid var(--line); }
+  .bnav button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; height: 52px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 11px; cursor: pointer; }
+  .bnav button span { display: grid; place-items: center; width: 44px; height: 26px; border-radius: 6px; font-size: 19px; color: var(--dim); transition: background .2s; }
+  .bnav button.on { color: var(--acc-h); }
+  .bnav button.on span { background: var(--acc-soft); color: var(--acc); }
+  .sbtn b { display: none; }
+  .chips { flex-wrap: nowrap; }
+  .ins { flex: 1 1 100%; max-width: none; order: -1; position: static; }
+  .ins-h { cursor: pointer; }
+  .ins-h .chev { display: block; }
+  .ins.open .ins-h .chev { transform: rotate(180deg); }
+  .ins:not(.open) .tabs, .ins:not(.open) .ins-b { display: none; }
+  .ins-b { max-height: none; }
+  .dtable { background: var(--line); border-radius: 8px; display: flex; flex-direction: column; gap: 1px; }
+  .dhead { display: none; }
+  .drow { grid-template-columns: auto auto minmax(0,1fr); grid-template-areas: "type date ch" "title title title" "path path path"; gap: 4px 8px; padding: 12px 14px; min-height: 0; border: 0; background: var(--surface); }
+  .d-type { grid-area: type; } .d-date { grid-area: date; font-size: 11.5px; color: var(--muted); align-self: center; }
+  .d-ch { grid-area: ch; font-size: 11.5px; color: var(--dim); } .d-ch i { display: inline; }
+  .d-title { grid-area: title; white-space: normal; font-size: 14.5px; }
+  .d-path { grid-area: path; font-size: 12px; }
+  .ndet { order: -1; position: static; flex: 1 1 100%; }
+  .drawer { top: 10vh; left: 0; width: 100%; border-left: 0; border-top: 1px solid var(--line2); border-radius: 16px 16px 0 0; transform: translate(0, 105%); padding-top: 0; }
+  .grip { display: block; }
+}
+</style>
+
+<div class="app">
+  <aside class="side">
+    <div class="brand"><div class="logo" data-ic="files"></div><div><b>文件搜尋</b><small>Product Docs · 內部</small></div></div>
+    <nav class="snav" id="snav" aria-label="主要導覽"></nav>
+    <div class="sidefoot">
+      <span class="live">示範環境</span>
+      <span>資料皆為示範用，規格僅供示意。</span>
+      <span><span class="kbd">/</span> 快速搜尋</span>
+    </div>
+  </aside>
+
+  <div class="col">
+    <header class="top">
+      <div class="logo" data-ic="files"></div>
+      <div class="tt"><h1 id="vt">搜尋</h1><span id="vs"></span></div>
+    </header>
+
+    <main>
+      <section id="v-search" class="stack" style="gap:14px">
+        <form class="card sform" id="sform">
+          <div class="srow">
+            <label class="sfield"><span data-ic="search"></span><input id="q" type="search" autocomplete="off" aria-label="搜尋文件" placeholder="用一句話描述你要找的文件"></label>
+            <button type="submit" class="sbtn"><span data-ic="arrowRight"></span><b>搜尋</b></button>
+          </div>
+          <div class="chips" id="chips"></div>
+        </form>
+        <div class="card funnel">
+          <div class="pills" id="pills"></div>
+          <div class="stack" style="gap:8px">
+            <div class="fbar"><div class="bf" id="bf"></div><div class="bv" id="bv"></div></div>
+            <div class="fstats" id="fstats"></div>
+          </div>
+        </div>
+        <div class="split">
+          <section class="results" id="results"></section>
+          <aside class="card ins" id="ins">
+            <button class="ins-h" id="insToggle" type="button"><span data-ic="flow"></span><span>系統處理過程</span><span class="chev" data-ic="caretDown"></span></button>
+            <div class="tabs" id="insTabs"></div>
+            <div class="ins-b" id="insBody"></div>
+          </aside>
+        </div>
+      </section>
+
+      <section id="v-docs" class="stack" style="gap:12px" hidden>
+        <div class="tools">
+          <label class="filter"><span data-ic="funnel"></span><input id="dtext" type="search" autocomplete="off" placeholder="篩選標題、標籤或產品" aria-label="篩選文件"></label>
+          <div class="seg" id="sortOpts"></div>
+        </div>
+        <div class="chips types" id="typeChips"></div>
+        <div class="dtable" id="docTable"></div>
+        <span class="foot" id="docFoot"></span>
+      </section>
+
+      <section id="v-tree" class="split" hidden>
+        <section class="card tbox">
+          <div class="tbox-h">
+            <span>名稱</span><small>文件數</small>
+            <button class="ghost icbtn" data-a="expand" title="全部展開" aria-label="全部展開"><span data-ic="expand"></span></button>
+            <button class="ghost icbtn" data-a="collapse" title="全部收合" aria-label="全部收合"><span data-ic="collapse"></span></button>
+          </div>
+          <div class="trows" id="trows"></div>
+        </section>
+        <section class="card ndet" id="ndet"></section>
+      </section>
+
+      <section id="v-schema" class="stack" style="gap:22px" hidden>
+        <div class="schemas">
+          <div class="card sch"><div class="sch-h"><b>product</b><span>產品樹</span><small id="cP"></small></div>
+            <dl><dt class="pk">id<sup>PK</sup></dt><dd>主鍵</dd><dt class="fk">parent_id</dt><dd>→ product.id，上一層，最上層為 null</dd><dt>name</dt><dd>Intel、CPU、Core Ultra 9 285K</dd><dt>kind</dt><dd>vendor / category / series / sku</dd></dl></div>
+          <div class="card sch"><div class="sch-h"><b>document</b><span>文件</span><small id="cD"></small></div>
+            <dl><dt class="pk">id<sup>PK</sup></dt><dd>主鍵</dd><dt>title</dt><dd>標題</dd><dt>file_uri</dt><dd>檔案在 NAS / S3 的位置</dd><dt>doc_type</dt><dd>config / datasheet / roadmap …</dd><dt>published</dt><dd>發布日期</dd><dt>tags</dt><dd>LLM 自動產生，選填</dd></dl></div>
+          <div class="card sch"><div class="sch-h"><b>document_product</b><span>對應</span><small id="cDP"></small></div>
+            <dl><dt class="fk">document_id</dt><dd>→ document.id</dd><dt class="fk">product_id</dt><dd>→ product.id</dd></dl>
+            <p>多對多：一份文件可掛多個產品，例如「AI PC 市場趨勢報告」同時掛在 Intel CPU、AMD CPU 與兩個筆電分類。</p></div>
+          <div class="card sch"><div class="sch-h"><b>chunk</b><span>段落</span><small id="cC"></small></div>
+            <dl><dt class="pk">id<sup>PK</sup></dt><dd>主鍵</dd><dt class="fk">document_id</dt><dd>→ document.id</dd><dt>chunk_index</dt><dd>第幾段</dd><dt>content</dt><dd>原文段落</dd><dt class="vk">embedding</dt><dd id="embNote"></dd></dl></div>
+        </div>
+        <p class="note" style="margin:-8px 2px 0;max-width:72ch">檔案本體不進資料庫，只記 file_uri。產品樹每列只記上一層，查詢時沿 parent_id 往下展開，文件不必重複標記 Intel、CPU。</p>
+        <div class="stack" style="gap:10px">
+          <div class="tabs" id="sTabs"></div>
+          <div class="legend" id="dimLegend" hidden></div>
+          <div class="tscroll" id="sTable"></div>
+          <button class="ghost morebtn" id="sMore" data-a="smore" hidden></button>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <nav class="bnav" id="bnav" aria-label="主要導覽"></nav>
+  <div class="scrim" id="scrim" data-a="close"></div>
+  <aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-label="文件詳情"></aside>
+</div>
+
+<script>
+// ---------- 示範資料 ----------
+const PRODUCTS = [
+  { id: 1,  parent_id: null, name: "Intel", kind: "vendor", aliases: ["英特爾"] },
+  { id: 2,  parent_id: 1,  name: "CPU", kind: "category", aliases: ["處理器"] },
+  { id: 3,  parent_id: 2,  name: "Core Ultra 200", kind: "series" },
+  { id: 4,  parent_id: 3,  name: "Core Ultra 9 285K", kind: "sku", aliases: ["285k"] },
+  { id: 5,  parent_id: 3,  name: "Core Ultra 7 265K", kind: "sku", aliases: ["265k"] },
+  { id: 6,  parent_id: 2,  name: "Panther Lake", kind: "series" },
+  { id: 7,  parent_id: 6,  name: "Core Ultra X9 388H", kind: "sku", aliases: ["388h"] },
+  { id: 8,  parent_id: 1,  name: "GPU", kind: "category", aliases: ["顯卡", "顯示卡"] },
+  { id: 9,  parent_id: 8,  name: "Arc B580", kind: "sku" },
+  { id: 19, parent_id: null, name: "AMD", kind: "vendor" },
+  { id: 20, parent_id: 19, name: "CPU", kind: "category", aliases: ["處理器"] },
+  { id: 21, parent_id: 20, name: "Ryzen AI 300", kind: "series" },
+  { id: 22, parent_id: 21, name: "Ryzen AI 9 HX 370", kind: "sku", aliases: ["hx 370"] },
+  { id: 10, parent_id: null, name: "ASUS", kind: "vendor", aliases: ["華碩"] },
+  { id: 11, parent_id: 10, name: "筆電", kind: "category", aliases: ["筆記型電腦", "laptop"] },
+  { id: 12, parent_id: 11, name: "ZenBook Duo", kind: "sku" },
+  { id: 23, parent_id: 11, name: "ZenBook 14 ScreenPad", kind: "sku" },
+  { id: 13, parent_id: 11, name: "ROG Zephyrus G14", kind: "sku" },
+  { id: 14, parent_id: 11, name: "Vivobook S14", kind: "sku" },
+  { id: 15, parent_id: null, name: "Lenovo", kind: "vendor", aliases: ["聯想"] },
+  { id: 16, parent_id: 15, name: "筆電", kind: "category", aliases: ["筆記型電腦", "laptop"] },
+  { id: 17, parent_id: 16, name: "Yoga Book 9i", kind: "sku" },
+  { id: 18, parent_id: 16, name: "ThinkBook Plus Gen 5", kind: "sku" },
+];
+
+const DOCS = [
+  { id: 1, title: "Core Ultra 9 285K BIOS 組態指南", doc_type: "config", published: "2024-10-24", products: [4], tags: ["BIOS", "超頻"], chunks: [
+    "本指南說明 Core Ultra 9 285K 在 Z890 主機板上的 BIOS 組態，包含 P-core 與 E-core 倍頻、Power Limit 參數與記憶體 XMP 設定。",
+    "建議 PL1/PL2 預設 125W / 250W，若散熱不足可調低 TDP 以降低功耗與溫度。"] },
+  { id: 16, title: "Core Ultra 7 265K 記憶體組態說明", doc_type: "config", published: "2024-11-05", products: [5], tags: ["DDR5"], chunks: [
+    "Core Ultra 7 265K 支援 DDR5-6400，雙通道四插槽時建議於 BIOS 降為 DDR5-5600 以確保穩定。",
+    "CUDIMM 模組需在組態頁面啟用 Clock Driver 選項。"] },
+  { id: 2, title: "Core Ultra 200S 平台設計指南", doc_type: "datasheet", published: "2024-10-10", products: [3], tags: ["LGA1851"], chunks: [
+    "Core Ultra 200S 採 LGA1851 腳位，最多 24 核心（8P + 16E），內建 NPU 提供約 13 TOPS 的 AI 運算。",
+    "平台支援 PCIe 5.0 x16 顯示卡插槽與 Thunderbolt 4。"] },
+  { id: 3, title: "2026 Intel 用戶端 CPU 路線圖", doc_type: "roadmap", published: "2026-01-08", products: [2], tags: ["roadmap", "18A"], chunks: [
+    "2026 年 Intel 用戶端產品以 Panther Lake 為主軸，首度採用 Intel 18A 製程，行動平台全面升級。",
+    "桌上型平台預計下半年推出 Nova Lake，新世代的核心數與快取架構都會調整。"] },
+  { id: 4, title: "Panther Lake 架構白皮書", doc_type: "whitepaper", published: "2026-01-15", products: [6], tags: ["18A", "NPU"], chunks: [
+    "Panther Lake 結合新一代 P-core 與 E-core 架構，NPU 算力提升至 50 TOPS 等級，鎖定 AI PC 市場。",
+    "整合式 Xe3 GPU 支援光追與 XeSS，輕薄筆電也能執行主流遊戲。"] },
+  { id: 5, title: "Core Ultra X9 388H 電源組態設定", doc_type: "config", published: "2026-02-20", products: [7], tags: ["電源", "TDP"], chunks: [
+    "Core Ultra X9 388H 的基礎功耗為 25W，OEM 可在 BIOS 將 TDP 組態設定於 15W 至 45W 之間。",
+    "於省電模式下，系統會優先排程至低功耗 E-core，以延長電池續航。"] },
+  { id: 6, title: "Arc B580 驅動組態說明", doc_type: "config", published: "2025-01-20", products: [9], tags: ["驅動"], chunks: [
+    "Arc B580 顯示卡建議在 BIOS 啟用 Resizable BAR，以發揮完整效能。",
+    "驅動程式控制面板可設定 XeSS 2 與幀生成，提升遊戲幀率。"] },
+  { id: 7, title: "ZenBook Duo (2025) 規格書", doc_type: "datasheet", published: "2025-01-07", products: [12], tags: ["雙螢幕", "OLED"], chunks: [
+    "ZenBook Duo 由兩塊 14 吋 OLED 觸控螢幕組成雙螢幕設計，可上下延伸或左右並排使用。",
+    "附可拆式藍牙鍵盤，放在下方螢幕上即成為傳統筆電；拿開後兩塊螢幕皆可觸控與手寫。",
+    "搭載 Core Ultra 9 處理器，電池 75Wh，重量約 1.65 kg。"] },
+  { id: 15, title: "ZenBook 14 ScreenPad 規格書", doc_type: "datasheet", published: "2024-06-01", products: [23], tags: ["ScreenPad"], chunks: [
+    "觸控板內建 5.65 吋 ScreenPad 觸控板螢幕，可當計算機、數字鍵盤或第二螢幕使用。",
+    "ScreenPad 可將應用程式拖曳至觸控板上執行，延伸主螢幕的工作空間。"] },
+  { id: 8, title: "ROG Zephyrus G14 規格書", doc_type: "datasheet", published: "2025-02-10", products: [13], tags: ["電競", "OLED"], chunks: [
+    "14 吋 3K OLED 螢幕，120Hz 更新率，峰值亮度 500 nits。",
+    "上蓋外側配置 Slash Lighting 燈條，可自訂動畫效果。",
+    "搭載 RTX 4070 顯示卡，重量 1.5 kg，適合攜帶的電競筆電。"] },
+  { id: 14, title: "Vivobook S14 規格書", doc_type: "datasheet", published: "2025-04-01", products: [14], tags: ["輕薄"], chunks: [
+    "14 吋 OLED 螢幕，解析度 1920×1200，重量僅 1.3 kg 的輕薄筆電。",
+    "75Wh 大電池，官方續航可達 18 小時。"] },
+  { id: 9, title: "Yoga Book 9i 產品白皮書", doc_type: "whitepaper", published: "2025-03-03", products: [17], tags: ["雙螢幕", "觸控筆"], chunks: [
+    "Yoga Book 9i 配備兩片 13.3 吋 2.8K OLED 面板，可上下螢幕堆疊，也可立起成帳篷模式。",
+    "上下兩塊螢幕可分割顯示不同應用程式，大幅提升多工生產力。",
+    "附藍牙鍵盤與觸控筆，下方螢幕可模擬虛擬觸控板。"] },
+  { id: 10, title: "ThinkBook Plus Gen 5 Hybrid 規格書", doc_type: "datasheet", published: "2024-01-08", products: [18], tags: ["電子紙", "可拆式"], chunks: [
+    "上蓋外側配置一塊 12 吋彩色電子紙副螢幕，闔上筆電也能查看通知與行事曆。",
+    "螢幕部分可拆下成為獨立 Android 平板，鍵盤底座保留 Windows 系統。",
+    "電子紙顯示幾乎不耗電，大幅延長續航。"] },
+  { id: 11, title: "2026 AI PC 市場趨勢報告", doc_type: "whitepaper", published: "2026-03-10", products: [2, 20, 11, 16], tags: ["市場", "AI PC"], chunks: [
+    "2026 年 CPU 發展重點在 NPU：主流行動處理器皆達 40 TOPS 以上，AI PC 滲透率預估超過五成。",
+    "製程方面，Intel 18A 與 TSMC N3 世代產品將於 2026 年同時進入市場。",
+    "筆電形態上，雙螢幕與可折疊裝置仍屬利基市場，但出貨年增率明顯。"] },
+  { id: 12, title: "Ryzen AI 9 HX 370 BIOS 組態指南", doc_type: "config", published: "2024-08-20", products: [22], tags: ["BIOS"], chunks: [
+    "Ryzen AI 9 HX 370 可於 BIOS 設定 cTDP 15W 至 54W，OEM 依散熱設計調整組態。",
+    "NPU 預設啟用，提供 50 TOPS AI 運算，可在 BIOS 中關閉以節省功耗。"] },
+  { id: 13, title: "AMD 2026 行動處理器路線圖", doc_type: "roadmap", published: "2026-01-06", products: [20], tags: ["roadmap", "Zen 6"], chunks: [
+    "AMD 2026 年行動處理器路線圖以 Zen 6 架構為核心，預計導入 2 奈米製程。",
+    "新世代 Ryzen AI 系列將強化 NPU 與內顯效能，主攻輕薄 AI PC。"] },
+];
+
+// ---------- 擴充資料 ----------
+PRODUCTS.push(
+  { id: 24, parent_id: 2,  name: "Lunar Lake", kind: "series" },
+  { id: 25, parent_id: 24, name: "Core Ultra 7 258V", kind: "sku", aliases: ["258v"] },
+  { id: 26, parent_id: 8,  name: "Arc B570", kind: "sku" },
+  { id: 27, parent_id: 19, name: "GPU", kind: "category", aliases: ["顯卡", "顯示卡"] },
+  { id: 28, parent_id: 27, name: "Radeon RX 9070 XT", kind: "sku", aliases: ["9070 xt"] },
+  { id: 29, parent_id: 27, name: "Radeon RX 9060 XT", kind: "sku", aliases: ["9060 xt"] },
+  { id: 30, parent_id: 20, name: "Ryzen 9000", kind: "series" },
+  { id: 31, parent_id: 30, name: "Ryzen 9 9950X3D", kind: "sku", aliases: ["9950x3d"] },
+  { id: 32, parent_id: 20, name: "Ryzen AI Max", kind: "series" },
+  { id: 33, parent_id: 32, name: "Ryzen AI Max+ 395", kind: "sku" },
+  { id: 34, parent_id: null, name: "NVIDIA", kind: "vendor", aliases: ["輝達"] },
+  { id: 35, parent_id: 34, name: "GPU", kind: "category", aliases: ["顯卡", "顯示卡"] },
+  { id: 36, parent_id: 35, name: "GeForce RTX 50", kind: "series", aliases: ["rtx 50"] },
+  { id: 37, parent_id: 36, name: "RTX 5090", kind: "sku" },
+  { id: 38, parent_id: 36, name: "RTX 5070", kind: "sku" },
+  { id: 39, parent_id: null, name: "Qualcomm", kind: "vendor", aliases: ["高通", "snapdragon"] },
+  { id: 40, parent_id: 39, name: "CPU", kind: "category", aliases: ["處理器"] },
+  { id: 41, parent_id: 40, name: "Snapdragon X Elite", kind: "sku" },
+  { id: 42, parent_id: 40, name: "Snapdragon X2 Elite", kind: "sku" },
+  { id: 43, parent_id: null, name: "Apple", kind: "vendor", aliases: ["蘋果"] },
+  { id: 46, parent_id: 43, name: "CPU", kind: "category", aliases: ["處理器"] },
+  { id: 47, parent_id: 46, name: "M5", kind: "sku" },
+  { id: 44, parent_id: 43, name: "筆電", kind: "category", aliases: ["筆記型電腦", "laptop", "macbook"] },
+  { id: 45, parent_id: 44, name: "MacBook Pro 14", kind: "sku" },
+  { id: 48, parent_id: 11, name: "ROG Flow Z13", kind: "sku" },
+  { id: 49, parent_id: 10, name: "主機板", kind: "category", aliases: ["motherboard"] },
+  { id: 50, parent_id: 49, name: "ROG Maximus Z890 Hero", kind: "sku", aliases: ["z890"] },
+  { id: 51, parent_id: 49, name: "TUF Gaming B850", kind: "sku", aliases: ["b850"] },
+  { id: 52, parent_id: 16, name: "ThinkPad X1 Carbon Gen 13", kind: "sku", aliases: ["x1 carbon"] },
+  { id: 53, parent_id: 16, name: "Legion 7i", kind: "sku" },
+  { id: 54, parent_id: 16, name: "ThinkPad X1 Fold", kind: "sku", aliases: ["x1 fold"] },
+  { id: 55, parent_id: null, name: "Dell", kind: "vendor", aliases: ["戴爾"] },
+  { id: 56, parent_id: 55, name: "筆電", kind: "category", aliases: ["筆記型電腦", "laptop"] },
+  { id: 57, parent_id: 56, name: "XPS 13", kind: "sku" },
+  { id: 58, parent_id: 56, name: "XPS 14", kind: "sku" },
+  { id: 59, parent_id: null, name: "HP", kind: "vendor", aliases: ["惠普"] },
+  { id: 60, parent_id: 59, name: "筆電", kind: "category", aliases: ["筆記型電腦", "laptop"] },
+  { id: 61, parent_id: 60, name: "Spectre x360 14", kind: "sku", aliases: ["spectre"] },
+  { id: 62, parent_id: 60, name: "OmniBook Ultra 14", kind: "sku", aliases: ["omnibook"] },
+);
+
+DOCS.push(
+  { id: 17, title: "Lunar Lake 架構白皮書", doc_type: "whitepaper", published: "2024-09-03", products: [24], tags: ["NPU", "記憶體封裝"], chunks: [
+    "Lunar Lake 將 LPDDR5X 記憶體直接封裝在處理器上，縮小主機板面積並降低功耗。",
+    "NPU 4 提供 48 TOPS AI 算力，整合式 Xe2 GPU 支援 XeSS。",
+    "設計目標是輕薄筆電的電池續航，閒置功耗較前代大幅下降。"] },
+  { id: 18, title: "Core Ultra 7 258V 電源組態設定", doc_type: "config", published: "2024-10-01", products: [25], tags: ["TDP"], chunks: [
+    "Core Ultra 7 258V 基礎功耗 17W，OEM 可在 BIOS 將 TDP 組態設定為 8W 至 37W。",
+    "建議輕薄機種啟用 Dynamic Tuning，依溫度自動調整功耗上限。"] },
+  { id: 19, title: "Arc B570 規格書", doc_type: "datasheet", published: "2025-01-16", products: [26], tags: ["GDDR6"], chunks: [
+    "Arc B570 配備 10GB GDDR6 記憶體，支援 XeSS 2 與光追。",
+    "建議電源 450W，單一 8-pin 供電，雙風扇散熱。"] },
+  { id: 20, title: "Radeon RX 9070 XT 規格書", doc_type: "datasheet", published: "2025-03-06", products: [28], tags: ["RDNA 4"], chunks: [
+    "RX 9070 XT 採 RDNA 4 架構，16GB GDDR6，強化光追與 AI 加速單元。",
+    "整卡功耗 304W，建議電源 750W，三風扇散熱設計。",
+    "支援 FSR 4，以 AI 升頻提升遊戲幀率。"] },
+  { id: 21, title: "Radeon RX 9060 XT 驅動組態說明", doc_type: "config", published: "2025-06-05", products: [29], tags: ["驅動"], chunks: [
+    "Adrenalin 驅動可設定 FSR 4、Anti-Lag 與 HYPR-RX 一鍵最佳化。",
+    "建議於 BIOS 啟用 Smart Access Memory（Resizable BAR）。"] },
+  { id: 22, title: "AMD 2026 顯示卡路線圖", doc_type: "roadmap", published: "2026-02-12", products: [27], tags: ["roadmap"], chunks: [
+    "AMD 2026 年顯示卡路線圖以新一代架構為核心，光追與 AI 運算單元全面升級。",
+    "新世代產品預計採用 3 奈米級製程，並導入 GDDR7 記憶體。"] },
+  { id: 23, title: "Ryzen 9 9950X3D 超頻與組態指南", doc_type: "config", published: "2025-03-12", products: [31], tags: ["超頻", "3D V-Cache"], chunks: [
+    "Ryzen 9 9950X3D 支援 PBO 與 Curve Optimizer，可在 BIOS 中對每顆核心微調電壓。",
+    "第二代 3D V-Cache 移至核心下方，散熱改善後允許完整超頻。",
+    "建議搭配 DDR5-6000 CL30 並啟用 EXPO 設定。"] },
+  { id: 24, title: "Ryzen AI Max+ 395 平台白皮書", doc_type: "whitepaper", published: "2025-01-06", products: [33], tags: ["APU", "統一記憶體"], chunks: [
+    "Ryzen AI Max+ 395 整合 16 核心 Zen 5 與 40 CU 內顯，最高可配置 128GB 統一記憶體。",
+    "NPU 提供 50 TOPS，可在本機執行大型語言模型等 AI 工作負載。",
+    "適合輕薄工作站與小型桌機，可取代入門獨立顯示卡。"] },
+  { id: 25, title: "GeForce RTX 5090 規格書", doc_type: "datasheet", published: "2025-01-30", products: [37], tags: ["Blackwell", "GDDR7"], chunks: [
+    "RTX 5090 搭載 32GB GDDR7，採 Blackwell 架構，支援 DLSS 4 多幀生成。",
+    "整卡功耗 575W，公版採雙風扇雙槽散熱設計。",
+    "支援 PCIe 5.0 x16 與 DisplayPort 2.1b 連接埠。"] },
+  { id: 26, title: "GeForce RTX 5070 驅動組態說明", doc_type: "config", published: "2025-03-05", products: [38], tags: ["驅動", "DLSS"], chunks: [
+    "NVIDIA App 可設定 DLSS 覆寫，讓舊遊戲也能使用新版升頻模型。",
+    "建議在 3D 設定中將電源管理模式設為最佳效能，避免遊戲時降頻。"] },
+  { id: 27, title: "NVIDIA 2026 GPU 路線圖", doc_type: "roadmap", published: "2026-03-18", products: [35], tags: ["roadmap"], chunks: [
+    "NVIDIA 2026 年資料中心導入新世代架構，消費級顯示卡預計隔年跟進。",
+    "RTX 50 中期改款預計 2026 年推出，提升 GDDR7 容量。"] },
+  { id: 28, title: "RTX 50 系列散熱測試報告", doc_type: "test_report", published: "2025-04-20", products: [36], tags: ["散熱", "噪音"], chunks: [
+    "滿載 30 分鐘測試中，RTX 5090 核心溫度維持 72°C，風扇噪音約 41 dBA。",
+    "RTX 5070 在 ITX 機殼內溫度上升 8°C，仍未觸發降頻。"] },
+  { id: 29, title: "Snapdragon X Elite 規格書", doc_type: "datasheet", published: "2024-05-20", products: [41], tags: ["Arm", "Oryon"], chunks: [
+    "Snapdragon X Elite 採 12 核心 Oryon CPU，NPU 提供 45 TOPS AI 算力。",
+    "Arm 架構帶來極低待機功耗，筆電續航可達 20 小時以上。"] },
+  { id: 30, title: "Snapdragon X2 Elite 架構白皮書", doc_type: "whitepaper", published: "2025-09-24", products: [42], tags: ["Oryon"], chunks: [
+    "Snapdragon X2 Elite 採第二代 Oryon 核心與 3 奈米製程，最高 18 核心。",
+    "NPU 提升至 80 TOPS，搭載機種預計 2026 年上半年上市。"] },
+  { id: 31, title: "Snapdragon 筆電續航測試報告", doc_type: "test_report", published: "2025-11-02", products: [40, 11, 16], tags: ["續航", "相容性"], chunks: [
+    "影片播放測試中，Snapdragon X Elite 機種平均續航 21 小時，高於 x86 對照組。",
+    "高負載下仍有部分 x86 遊戲因模擬層而降頻或無法執行。"] },
+  { id: 32, title: "Apple M5 晶片技術簡介", doc_type: "whitepaper", published: "2025-10-15", products: [47], tags: ["3 奈米"], chunks: [
+    "M5 採第三代 3 奈米製程，每個 GPU 核心都加入神經網路加速器，AI 效能大幅提升。",
+    "統一記憶體頻寬提升至 153GB/s。"] },
+  { id: 33, title: "MacBook Pro 14 (M5) 規格書", doc_type: "datasheet", published: "2025-10-15", products: [45], tags: ["XDR"], chunks: [
+    "14.2 吋 Liquid Retina XDR 螢幕，峰值亮度 1600 nits，支援 120Hz 更新率。",
+    "電池續航最長 24 小時，重量 1.55 kg。",
+    "配備三個 Thunderbolt 4 連接埠、HDMI 與 SDXC 卡槽。"] },
+  { id: 34, title: "ROG Flow Z13 (2025) 規格書", doc_type: "datasheet", published: "2025-02-25", products: [48], tags: ["平板", "可拆式"], chunks: [
+    "13.4 吋 2.5K 180Hz 觸控螢幕，可拆式鍵盤讓它在平板與筆電之間切換。",
+    "搭載 Ryzen AI Max+ 395，內顯即可執行 3A 遊戲。",
+    "重量僅 1.2 kg，採均熱板散熱設計。"] },
+  { id: 35, title: "ROG Maximus Z890 Hero BIOS 設定手冊", doc_type: "manual", published: "2024-10-24", products: [50], tags: ["BIOS", "超頻"], chunks: [
+    "AI Overclocking 會依處理器體質與散熱器能力自動調整超頻參數。",
+    "記憶體頁面可一鍵載入 XMP 設定檔，並支援 CUDIMM。",
+    "背板提供兩個 Thunderbolt 4 連接埠與 Wi-Fi 7。"] },
+  { id: 36, title: "TUF Gaming B850 使用手冊", doc_type: "manual", published: "2025-01-10", products: [51], tags: ["AM5"], chunks: [
+    "安裝 Ryzen 9000 處理器前，請先將 BIOS 更新至最新版本。",
+    "M.2 插槽支援 PCIe 5.0，第一個插槽附散熱片。"] },
+  { id: 37, title: "ThinkPad X1 Carbon Gen 13 規格書", doc_type: "datasheet", published: "2024-11-20", products: [52], tags: ["輕薄", "商務"], chunks: [
+    "搭載 Core Ultra 7 258V，重量不到 1 kg，是最輕的一代 X1 Carbon。",
+    "14 吋 2.8K OLED 螢幕，選配低藍光面板。",
+    "電池 57Wh，續航可達 20 小時。"] },
+  { id: 38, title: "Legion 7i 散熱測試報告", doc_type: "test_report", published: "2025-05-08", products: [53], tags: ["散熱", "電競"], chunks: [
+    "Coldfront 散熱系統在滿載下維持 CPU 溫度 88°C，未出現明顯降頻。",
+    "效能模式風扇噪音 52 dBA，安靜模式則降至 38 dBA。"] },
+  { id: 39, title: "ThinkPad X1 Fold 規格書", doc_type: "datasheet", published: "2024-09-10", products: [54], tags: ["折疊螢幕"], chunks: [
+    "16.3 吋 OLED 折疊螢幕，展開是平板；對折後上下各一塊螢幕，就像雙螢幕筆電。",
+    "附磁吸藍牙鍵盤與觸控筆，可在桌面模式與平板模式之間切換。"] },
+  { id: 40, title: "XPS 13 (2025) 規格書", doc_type: "datasheet", published: "2025-01-07", products: [57], tags: ["輕薄"], chunks: [
+    "可選 Snapdragon X Elite 或 Core Ultra 處理器，重量 1.19 kg。",
+    "觸控功能列取代實體 F 鍵，搭配無縫玻璃觸控板。"] },
+  { id: 41, title: "XPS 14 使用手冊", doc_type: "manual", published: "2025-02-14", products: [58], tags: ["電源管理"], chunks: [
+    "透過 Dell Optimizer 可設定電源模式與散熱風扇曲線。",
+    "兩側共三個 Thunderbolt 4 連接埠，可外接兩台 4K 螢幕延伸工作空間。"] },
+  { id: 42, title: "Spectre x360 14 規格書", doc_type: "datasheet", published: "2024-06-12", products: [61], tags: ["翻轉", "觸控筆"], chunks: [
+    "360 度翻轉 OLED 觸控螢幕，可在筆電、帳篷與平板模式之間切換。",
+    "附 MPP 觸控筆，支援手寫與繪圖。"] },
+  { id: 43, title: "OmniBook Ultra 14 規格書", doc_type: "datasheet", published: "2025-01-07", products: [62], tags: ["AI PC"], chunks: [
+    "搭載 Ryzen AI 9 HX 375，NPU 提供 55 TOPS AI 算力。",
+    "重量 1.63 kg，提供兩個 USB4 連接埠。"] },
+  { id: 44, title: "2026 筆電形態趨勢報告", doc_type: "whitepaper", published: "2026-04-02", products: [11, 16, 56, 60, 44], tags: ["市場", "形態"], chunks: [
+    "2026 年筆電發展的關鍵字是 AI 與新形態：雙螢幕、折疊螢幕與可拆式機種都將擴大產品線。",
+    "輕薄機種重量普遍降至 1.2 kg 以下，續航以 20 小時為新標準。",
+    "高階機種全面導入 OLED 與高更新率螢幕，中階機種跟進。"] },
+  { id: 45, title: "下一代 x86 CPU 路線圖展望", doc_type: "roadmap", published: "2026-09-15", products: [2, 20], tags: ["roadmap"], chunks: [
+    "Intel 與 AMD 下一代架構預計 2027 年推出，兩者都將導入 2 奈米級製程。",
+    "NPU 算力目標超過 100 TOPS，AI 推論將成為處理器的標準工作負載。"] },
+  { id: 46, title: "Arc B580 遊戲效能測試報告", doc_type: "test_report", published: "2025-02-03", products: [9], tags: ["跑分"], chunks: [
+    "1440p 下 Arc B580 平均幀率較前代提升 70%，開啟 XeSS 2 後再增加 40%。",
+    "部分 DirectX 11 遊戲表現仍不穩定，建議更新至最新驅動。"] },
+  { id: 47, title: "Core Ultra 200S 0x114 微碼更新說明", doc_type: "config", published: "2025-01-15", products: [3], tags: ["微碼", "BIOS"], chunks: [
+    "0x114 微碼修正遊戲效能不穩，更新後需於 BIOS 套用 Intel Default Settings 電源組態。",
+    "部分主機板需同時更新 CSME 韌體才能發揮完整效能。"] },
+  { id: 48, title: "ZenBook Duo 使用手冊", doc_type: "manual", published: "2025-02-01", products: [12], tags: ["ScreenXpert"], chunks: [
+    "開啟 ScreenXpert 可將應用程式快速分割到上下兩塊螢幕。",
+    "鍵盤放在下方螢幕上時，系統會自動關閉下方螢幕以省電。",
+    "以觸控筆在任一螢幕上手寫，即可啟動筆記功能。"] },
+);
+
+// 模擬 embedding：真實模型輸出 1024 維、人看不懂的數字。這裡用十幾個看得懂的「概念維度」代替，
+// 每個維度由一組同義詞觸發，所以「小螢幕」「雙螢幕」「副螢幕」「ScreenPad」都落在同一個維度。
+const DIMS = [
+  { k: "副螢幕／多螢幕", terms: { "雙螢幕": 1, "副螢幕": 1, "小螢幕": 1, "第二螢幕": 1, "兩塊螢幕": 1, "上下螢幕": 1, "screenpad": 1, "電子紙": .8, "觸控板螢幕": 1, "額外螢幕": 1, "雙屏": 1, "多螢幕": 1, "一塊螢幕": .6, "折疊": .9 } },
+  { k: "顯示面板", terms: { "螢幕": .3, "oled": .5, "吋": .3, "解析度": .5, "nits": .4, "更新率": .5, "面板": .4 } },
+  { k: "CPU 演進", terms: { "發展": 1, "趨勢": .8, "roadmap": 1, "路線圖": 1, "製程": .8, "架構": .7, "世代": .7, "核心": .4 } },
+  { k: "AI／NPU", terms: { "ai": .6, "npu": 1, "tops": .8 } },
+  { k: "電源續航", terms: { "電池": 1, "續航": 1, "功耗": .8, "tdp": .8, "電源": .6, "省電": 1, "耗電": .8 } },
+  { k: "組態設定", terms: { "組態": 1, "bios": 1, "設定": .6, "參數": .6, "超頻": .7, "xmp": .6 } },
+  { k: "繪圖效能", terms: { "gpu": .8, "顯示卡": 1, "驅動": .7, "光追": .8, "遊戲": .6, "xess": .6 } },
+  { k: "攜帶性", terms: { "重量": 1, "輕薄": 1, "kg": .6, "攜帶": .8, "厚度": .7 } },
+  { k: "輸入裝置", terms: { "鍵盤": 1, "觸控板": .8, "觸控筆": .8, "手寫": .6 } },
+  { k: "多工效率", terms: { "多工": 1, "生產力": .8, "分割": .6, "延伸": .5, "並排": .6 } },
+  { k: "散熱", terms: { "散熱": 1, "溫度": .8, "風扇": .8, "均熱板": 1, "降頻": .8, "噪音": .5, "過熱": 1 } },
+  { k: "連接擴充", terms: { "thunderbolt": 1, "usb4": 1, "pcie": .8, "wi-fi": .7, "插槽": .6, "連接埠": 1, "hdmi": .6, "外接": .6 } },
+];
+
+const DOC_TYPE_RULES = [
+  { words: ["組態", "設定", "bios", "config"], types: ["config", "manual"] },
+  { words: ["規格", "spec", "datasheet"], types: ["datasheet"] },
+  { words: ["路線圖", "roadmap", "發展", "趨勢"], types: ["roadmap", "whitepaper"] },
+  { words: ["白皮書"], types: ["whitepaper"] },
+  { words: ["測試", "評測", "跑分", "benchmark"], types: ["test_report"] },
+  { words: ["手冊", "說明書", "manual"], types: ["manual"] },
+];
+const STOPWORDS = ["有沒有", "哪些", "推薦", "可以", "底下", "相關", "有關", "關於", "所有", "文件", "資料", "搜尋", "報告", "的", "帶", "有", "找", "年"];
+const EXAMPLES = ["帶小螢幕的筆電", "2026年CPU發展", "Core Ultra 200 底下的組態文件", "可以折疊的筆電", "RTX 50 散熱", "Snapdragon 續航", "主機板 BIOS 設定", "顯卡 測試報告", "2026 筆電發展", "省電 續航"];
+const RELEVANT = 0.4;
+
+// ---------- 工具 ----------
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const byId = Object.fromEntries(PRODUCTS.map(p => [p.id, p]));
+const kids = id => PRODUCTS.filter(p => p.parent_id === id);
+const subtree = id => [id, ...kids(id).flatMap(k => subtree(k.id))];
+const ancestors = id => { const a = []; for (let p = byId[id]; p; p = byId[p.parent_id]) a.push(p.id); return a; };
+const pathOf = id => ancestors(id).reverse().map(i => byId[i].name).join(" › ");
+const count = (t, term) => t.split(term).length - 1;
+const norm = v => Math.hypot(...v);
+function embed(text) {
+  const t = text.toLowerCase();
+  const raw = DIMS.map(d => Object.entries(d.terms).reduce((s, [term, w]) => s + w * count(t, term), 0));
+  const n = norm(raw);
+  return raw.map(x => n ? +(x / n).toFixed(3) : 0);
+}
+const cos = (a, b) => a.reduce((s, x, i) => s + x * b[i], 0); // 已正規化
+let cid = 0;
+const CHUNKS = DOCS.flatMap(d => d.chunks.map((content, i) => ({ id: ++cid, document_id: d.id, chunk_index: i, content, embedding: embed(content) })));
+const DOC_PRODUCT = DOCS.flatMap(d => d.products.map(p => ({ document_id: d.id, product_id: p })));
+
+// ---------- 模擬 LLM：把一句話拆成結構化條件 + 語意 ----------
+function parse(q) {
+  const lower = q.toLowerCase();
+  let rem = lower;
+  const ym = rem.match(/(20\d{2})\s*年?/);
+  const year = ym ? +ym[1] : null;
+  if (ym) rem = rem.replace(ym[0], " ");
+
+  const groups = {};
+  for (const p of PRODUCTS) for (const term of [p.name.toLowerCase(), ...(p.aliases || [])])
+    if (lower.includes(term)) (groups[term] ||= new Set()).add(p.id);
+  for (const term of Object.keys(groups).sort((a, b) => b.length - a.length)) rem = rem.split(term).join(" ");
+
+  const gs = Object.values(groups);
+  const all = [...new Set(gs.flatMap(g => [...g]))];
+  // 每個比對到的詞都要成立：Intel + CPU → 只留 Intel 底下的 CPU
+  const nodes = all.filter(n => gs.every(g => ancestors(n).some(a => g.has(a))))
+                   .filter((n, _, arr) => !arr.some(m => m !== n && ancestors(m).includes(n)));
+
+  const doc_types = [...new Set(DOC_TYPE_RULES.filter(r => r.words.some(w => lower.includes(w))).flatMap(r => r.types))];
+  for (const w of STOPWORDS) rem = rem.split(w).join(" ");
+  const semantic = rem.replace(/[\s,，、。?？!！]+/g, " ").trim();
+  return { products: nodes.map(n => pathOf(n)), _nodes: nodes, _terms: Object.keys(groups), year, doc_types, semantic };
+}
+
+function search(q) {
+  const P = parse(q);
+  const nodeSet = P._nodes.length ? new Set(P._nodes.flatMap(subtree)) : null;
+  const pass = d => (!nodeSet || d.products.some(p => nodeSet.has(p)))
+    && (!P.year || d.published.startsWith(String(P.year)))
+    && (!P.doc_types.length || P.doc_types.includes(d.doc_type));
+  const filtered = DOCS.filter(pass);
+  const qv = embed(P.semantic);
+  const hasSem = qv.some(x => x);
+  const scored = filtered.map(d => {
+    const cs = CHUNKS.filter(c => c.document_id === d.id).map(c => ({ c, s: hasSem ? cos(qv, c.embedding) : null }));
+    cs.sort((a, b) => (b.s ?? 0) - (a.s ?? 0));
+    return { d, best: cs[0].c, score: cs[0].s };
+  }).sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || b.d.published.localeCompare(a.d.published));
+  const kw = P.semantic.replace(/\s+/g, "");
+  const keywordHits = kw ? filtered.filter(d => d.chunks.some(c => c.toLowerCase().includes(kw))).length : null;
+  return { P, nodeSet, filtered, qv, hasSem, scored, kw, keywordHits };
+}
+
+
+
+// ---------- 介面補充 ----------
+const TYPE_LABEL = { config: "組態", datasheet: "規格書", roadmap: "路線圖", whitepaper: "白皮書", test_report: "測試報告", manual: "手冊" };
+const KIND = { vendor: "廠商", category: "類別", series: "系列", sku: "型號" };
+function sqlLines(r) {
+  const P = r.P, L = [], f = "f", v = "v";
+  if (P._nodes.length) L.push([["WITH RECURSIVE sub AS (", f]], [["  SELECT id FROM product WHERE id IN (" + P._nodes.join(", ") + ")", f]], [["  UNION ALL", f]], [["  SELECT p.id FROM product p JOIN sub ON p.parent_id = sub.id", f]], [[")", f]]);
+  L.push([["SELECT d.id, d.title" + (r.hasSem ? "," : ""), ""]]);
+  if (r.hasSem) L.push([["       MIN(c.embedding <=> :query_vec) AS distance", v]]);
+  L.push([["FROM document d", ""]]);
+  if (P._nodes.length) L.push([["JOIN document_product dp ON dp.document_id = d.id", f]]);
+  if (r.hasSem) L.push([["JOIN chunk c ON c.document_id = d.id", v]]);
+  const w = [];
+  if (P._nodes.length) w.push("dp.product_id IN (SELECT id FROM sub)");
+  if (P.year) w.push("d.published >= '" + P.year + "-01-01' AND d.published < '" + (P.year + 1) + "-01-01'");
+  if (P.doc_types.length) w.push("d.doc_type IN (" + P.doc_types.map(t => "'" + t + "'").join(", ") + ")");
+  w.forEach((x, i) => L.push([[i ? "  AND " : "WHERE ", ""], [x, f]]));
+  if (r.hasSem) L.push([["GROUP BY d.id, d.title", ""]], [["ORDER BY distance", v]]);
+  else L.push([["ORDER BY d.published DESC", ""]]);
+  L.push([["LIMIT 20;", ""]]);
+  return L;
+}
+function highlightSegs(text, qv) {
+  const terms = qv ? DIMS.flatMap((d, i) => qv[i] > 0 ? Object.keys(d.terms) : []).sort((a, b) => b.length - a.length) : [];
+  if (!terms.length) return [{ t: text, m: false }];
+  const lower = text.toLowerCase(), out = [];
+  let i = 0, buf = "";
+  while (i < text.length) {
+    const hit = terms.find(t => lower.startsWith(t, i));
+    if (hit) { if (buf) out.push({ t: buf, m: false }); buf = ""; out.push({ t: text.substr(i, hit.length), m: true }); i += hit.length; }
+    else { buf += text[i]; i++; }
+  }
+  if (buf) out.push({ t: buf, m: false });
+  return out;
+}
+const segs = (text, qv) => highlightSegs(text, qv).map(s => s.m ? `<mark>${esc(s.t)}</mark>` : esc(s.t)).join("");
+const fmtJSON = o => JSON.stringify(o, null, 2).replace(/\[\s+([-\d.,\s]+?)\s+\]/g, (_, a) => "[" + a.replace(/\s+/g, " ") + "]");
+const heatHTML = v => `<span class="heat" title="${v.join(", ")}">${v.map(x => `<i style="opacity:${(0.08 + x * 0.92).toFixed(2)}"></i>`).join("")}</span>`;
+
+const IC = {
+  files: '<path d="M8 7V5a2 2 0 0 1 2-2h6l4 4v10a2 2 0 0 1-2 2h-2"/><path d="M4 9a2 2 0 0 1 2-2h5l3 3v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/>',
+  search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+  tree: '<rect x="3" y="3" width="7" height="5" rx="1"/><rect x="14" y="10" width="7" height="5" rx="1"/><rect x="14" y="17" width="7" height="5" rx="1"/><path d="M6.5 8v11.5H14M6.5 12.5H14"/>',
+  db: '<ellipse cx="12" cy="5.5" rx="8" ry="3"/><path d="M4 5.5v13c0 1.7 3.6 3 8 3s8-1.3 8-3v-13"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>',
+  arrowRight: '<path d="M5 12h14M13 6l6 6-6 6"/>',
+  caretRight: '<path d="m9 6 6 6-6 6"/>',
+  caretDown: '<path d="m6 9 6 6 6-6"/>',
+  flow: '<circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.5 6H14a4 4 0 0 1 4 4v5.5"/>',
+  funnel: '<path d="M4 6h16M7 12h10M10 18h4"/>',
+  expand: '<path d="M12 3v7M9 6l3-3 3 3M12 21v-7M9 18l3 3 3-3M4 12h16"/>',
+  collapse: '<path d="M12 3v6M9 6l3 3 3-3M12 21v-6M9 18l3-3 3 3M4 12h16"/>',
+  x: '<path d="M6 6l12 12M18 6 6 18"/>',
+  upRight: '<path d="M7 17 17 7M8 7h9v9"/>',
+};
+const ic = n => `<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[n]}</svg>`;
+document.querySelectorAll("[data-ic]").forEach(el => { el.innerHTML = ic(el.dataset.ic); });
+
+// ---------- 狀態 ----------
+const NAV = [
+  { id: "search", label: "搜尋", icon: "search" },
+  { id: "docs", label: "文件庫", icon: "files" },
+  { id: "tree", label: "產品樹", icon: "tree" },
+  { id: "schema", label: "資料表", icon: "db" },
+];
+const ROOTS = PRODUCTS.filter(p => p.parent_id === null);
+const UNDER = {};
+PRODUCTS.forEach(p => { const set = new Set(subtree(p.id)); UNDER[p.id] = DOCS.filter(d => d.products.some(x => set.has(x))); });
+const S = { view: "search", q: "", r: null, insTab: "tree", insOpen: false, showLow: false,
+  drawer: false, docId: null, fromSearch: false, dTab: "overview",
+  dType: "all", dSort: "new", dText: "", expanded: new Set(ROOTS.map(p => p.id)), sel: 1, sTab: "product", sLimit: 30 };
+const phone = matchMedia("(max-width: 859px)");
+const $ = s => document.querySelector(s);
+
+// ---------- 導覽 ----------
+function renderNav() {
+  const count = id => id === "docs" ? DOCS.length : id === "tree" ? PRODUCTS.length : "";
+  $("#snav").innerHTML = NAV.map(n => `<button type="button" class="${S.view === n.id ? "on" : ""}" data-a="nav" data-v="${n.id}" ${S.view === n.id ? 'aria-current="page"' : ""}>${ic(n.icon)}<span>${n.label}</span>${count(n.id) ? `<small>${count(n.id)}</small>` : ""}</button>`).join("");
+  $("#bnav").innerHTML = NAV.map(n => `<button type="button" class="${S.view === n.id ? "on" : ""}" data-a="nav" data-v="${n.id}"><span>${ic(n.icon)}</span>${n.label}</button>`).join("");
+  const T = { search: ["搜尋", "用一句話描述要找的文件，系統拆成結構化篩選與語意比對"], docs: ["文件庫", `${DOCS.length} 份文件 · ${CHUNKS.length} 個段落`],
+    tree: ["產品樹", `${PRODUCTS.length} 個節點 · 廠商 › 類別 › 系列 › 型號`], schema: ["資料表", "Postgres + pgvector · 4 張表"] }[S.view];
+  $("#vt").textContent = T[0]; $("#vs").textContent = T[1];
+}
+function go(v, opts = {}) {
+  if (!NAV.some(n => n.id === v)) v = "search";
+  S.view = v; closeDrawer();
+  for (const n of NAV) $("#v-" + n.id).hidden = n.id !== v;
+  renderNav();
+  ({ search: renderSearch, docs: renderDocs, tree: renderTree, schema: renderSchema })[v]();
+  if (location.hash !== "#" + v) location.hash = v;
+  if (!opts.keepScroll) window.scrollTo({ top: 0 });
+}
+
+// ---------- 搜尋 ----------
+function runSearch(q) {
+  q = (q || "").trim(); if (!q) return;
+  S.q = q; S.r = search(q); S.showLow = false;
+  $("#q").value = q;
+  renderSearch();
+}
+function renderSearch() {
+  const r = S.r, P = r.P;
+  $("#chips").innerHTML = `<span>範例</span>` + EXAMPLES.map(t => `<button type="button" class="chip ${t === S.q ? "on" : ""}" data-a="ex" data-v="${esc(t)}">${esc(t)}</button>`).join("");
+
+  const pills = [];
+  P.products.forEach(p => pills.push(["f", "產品", p]));
+  if (P.year) pills.push(["f", "年份", P.year]);
+  if (P.doc_types.length) pills.push(["f", "類型", P.doc_types.map(t => TYPE_LABEL[t]).join(" / ")]);
+  if (P.semantic) pills.push([r.hasSem ? "v" : "x", r.hasSem ? "語意" : "語意 · 不在詞庫", `「${P.semantic}」`]);
+  $("#pills").innerHTML = `<span class="lead"><b>1</b>LLM 拆解查詢</span>` + (pills.length ? pills.map(([c, k, v]) => `<span class="pill ${c}"><i>${k}</i><span>${esc(v)}</span></span>`).join("") : `<span class="note s">沒有可用條件</span>`);
+
+  const rel = r.scored.filter(x => !r.hasSem || x.score >= RELEVANT);
+  const low = r.hasSem ? r.scored.filter(x => x.score < RELEVANT) : [];
+  const total = DOCS.length;
+  $("#bf").style.width = r.filtered.length / total * 100 + "%";
+  $("#bv").style.width = (r.hasSem ? rel.length : 0) / total * 100 + "%";
+  $("#fstats").innerHTML = `<span><b>${total}</b>全部文件</span>
+    <span class="kf"><span class="sw"></span><b>${r.filtered.length}</b>通過結構化篩選</span>
+    ${r.hasSem ? `<span class="kv"><span class="sw"></span><b>${rel.length}</b>語意相似度 ≥ ${RELEVANT}</span>` : ""}
+    ${r.kw ? `<span class="kw">對照：改用關鍵字 <code>LIKE '%${esc(r.kw)}%'</code> 只找得到 ${r.keywordHits ?? 0} 份</span>` : ""}`;
+
+  const qv = r.hasSem ? r.qv : null;
+  const item = (x, i) => { const d = x.d; return `
+    <div class="ritem reveal" style="--d:${Math.min(i, 10) * 40}ms" role="button" tabindex="0" data-a="open" data-v="${d.id}" data-fs="1">
+      <div class="rmain">
+        <div class="rmeta"><span class="badge">${TYPE_LABEL[d.doc_type]}</span><span class="mono">${d.published}</span><span class="rpath">${esc(pathOf(d.products[0]))}</span>${d.products.length > 1 ? `<span class="rmore">+${d.products.length - 1}</span>` : ""}</div>
+        <h3>${esc(d.title)}</h3>
+        <p class="rsnip">${segs(x.best.content, qv)}</p>
+      </div>
+      ${x.score !== null ? `<div class="rscore"><b>${x.score.toFixed(2)}</b><div class="sbar"><div style="width:${Math.max(0, x.score) * 100}%"></div></div><small>相似度</small></div>` : ""}
+    </div>`; };
+  $("#results").innerHTML = `
+    <div class="rhead"><h2>結果<b>${rel.length}</b></h2><span>${r.hasSem ? "依語意相似度排序" : "依發布日期排序"}</span></div>
+    ${rel.length ? `<div class="list">${rel.map(item).join("")}</div>` : `<div class="empty">沒有找到相關文件。換個說法，或點上方的範例試試。</div>`}
+    ${low.length ? `<button type="button" class="lowbtn ${S.showLow ? "on" : ""}" data-a="low" aria-expanded="${S.showLow}">${ic("caretRight")}<span>通過篩選，但語意不相關</span><small>${low.length}</small></button>
+      ${S.showLow ? `<div class="list">${low.map((x, i) => `<div class="litem reveal" style="--d:${Math.min(i, 10) * 30}ms" role="button" tabindex="0" data-a="open" data-v="${x.d.id}" data-fs="1"><div class="stack" style="gap:3px;min-width:0"><div class="m"><span>${TYPE_LABEL[x.d.doc_type]}</span><span class="mono">${x.d.published}</span></div><span class="t">${esc(x.d.title)}</span></div><b>${x.score.toFixed(2)}</b></div>`).join("")}</div>` : ""}` : ""}`;
+  renderIns();
+}
+function renderIns() {
+  const r = S.r, P = r.P;
+  $("#ins").classList.toggle("open", S.insOpen);
+  $("#insToggle").setAttribute("aria-expanded", String(!phone.matches || S.insOpen));
+  $("#insTabs").innerHTML = [["tree", "2", "產品樹"], ["sql", "3", "SQL"], ["vec", "4", "向量"]].map(([id, n, l]) => `<button type="button" class="tab ${S.insTab === id ? "on" : ""}" data-a="insTab" data-v="${id}"><span class="n">${n}</span>${l}</button>`).join("");
+  let html = "";
+  if (S.insTab === "tree") {
+    const ns = r.nodeSet, keep = ns ? ROOTS.filter(rt => subtree(rt.id).some(i => ns.has(i))) : [], rest = ROOTS.filter(rt => !keep.includes(rt));
+    const rows = [];
+    const walk = (p, depth) => { const hit = P._nodes.includes(p.id), inn = ns && ns.has(p.id);
+      rows.push(`<div class="${hit ? "hit in" : inn ? "in" : ""}" style="padding-left:${8 + depth * 16}px"><span>${esc(p.name)}</span><small>${p.kind}</small></div>`);
+      kids(p.id).forEach(k => walk(k, depth + 1)); };
+    keep.forEach(k => walk(k, 0));
+    html = `<p class="note">${P._nodes.length ? `比對到 ${P._nodes.length} 個節點，往下展開共 ${ns.size} 個產品。文件掛在其中任一個即符合。` : "查詢沒有提到產品，所以不篩產品。"}</p>
+      ${rows.length ? `<div class="itree">${rows.join("")}</div>` : ""}
+      ${ns && rest.length ? `<p class="note s">未符合、已收合：${rest.map(x => esc(x.name)).join("、")}</p>` : ""}`;
+  } else if (S.insTab === "sql") {
+    html = `<p class="note">琥珀色來自結構化條件，青綠色來自語意向量。</p><div class="sql">${sqlLines(r).map(line => `<div>${line.map(([t, c]) => c ? `<span class="${c}">${esc(t)}</span>` : esc(t)).join("")}</div>`).join("")}</div>`;
+  } else {
+    const note = r.hasSem ? `「${esc(P.semantic)}」被轉成下面這組數字，再和每個段落的向量比較方向（cosine 相似度）。真實模型有 1024 維，這裡用 ${DIMS.length} 個看得懂的維度示意。`
+      : P.semantic ? `「${esc(P.semantic)}」不在示範詞庫裡，向量為零，結果依日期排序。` : "篩選條件已涵蓋整個查詢，不需要語意排序，結果依日期排序。";
+    html = `<p class="note">${note}</p>` + (r.hasSem ? `<div class="vgrid">${DIMS.map((d, i) => `<span class="${r.qv[i] > 0 ? "on" : ""}">${d.k}</span><div class="tr"><div style="width:${r.qv[i] * 100}%"></div></div><span class="val ${r.qv[i] > 0 ? "on" : ""}">${r.qv[i].toFixed(2)}</span>`).join("")}</div>` : "");
+  }
+  $("#insBody").innerHTML = html;
+}
+
+// ---------- 文件庫 ----------
+function renderDocs() {
+  $("#sortOpts").innerHTML = [["new", "最新"], ["old", "最舊"], ["title", "標題"]].map(([id, l]) => `<button type="button" class="${S.dSort === id ? "on" : ""}" data-a="sort" data-v="${id}" aria-pressed="${S.dSort === id}">${l}</button>`).join("");
+  $("#typeChips").innerHTML = ["all", ...Object.keys(TYPE_LABEL)].map(t => `<button type="button" class="chip ${S.dType === t ? "on" : ""}" data-a="dtype" data-v="${t}">${t === "all" ? "全部" : TYPE_LABEL[t]}<small>${t === "all" ? DOCS.length : DOCS.filter(d => d.doc_type === t).length}</small></button>`).join("");
+  renderDocList();
+}
+function renderDocList() {
+  const txt = S.dText.trim().toLowerCase();
+  let list = DOCS.filter(d => S.dType === "all" || d.doc_type === S.dType)
+    .filter(d => !txt || (d.title + " " + d.tags.join(" ") + " " + d.products.map(pathOf).join(" ")).toLowerCase().includes(txt));
+  list = [...list].sort(S.dSort === "new" ? (a, b) => b.published.localeCompare(a.published) : S.dSort === "old" ? (a, b) => a.published.localeCompare(b.published) : (a, b) => a.title.localeCompare(b.title, "zh-Hant"));
+  $("#docTable").hidden = !list.length;
+  $("#docTable").innerHTML = `<div class="dhead"><span>標題</span><span>類型</span><span>產品</span><span>發布日期</span><span>段落</span></div>` +
+    list.map(d => `<div class="drow" role="button" tabindex="0" data-a="open" data-v="${d.id}">
+      <span class="d-title">${esc(d.title)}</span><span class="d-type"><span class="badge">${TYPE_LABEL[d.doc_type]}</span></span>
+      <span class="d-path">${esc(pathOf(d.products[0]))} <small>${d.products.length > 1 ? "+" + (d.products.length - 1) : ""}</small></span>
+      <span class="d-date">${d.published}</span><span class="d-ch">${d.chunks.length}<i> 段</i></span></div>`).join("");
+  $("#docFoot").innerHTML = (list.length ? "" : `<div class="empty" style="margin-bottom:12px">沒有符合的文件</div>`) + `顯示 ${list.length} / ${DOCS.length} 份`;
+}
+
+// ---------- 產品樹 ----------
+function selectNode(id) {
+  ancestors(id).forEach(a => S.expanded.add(a));
+  S.sel = id;
+  if (S.view !== "tree") go("tree"); else { closeDrawer(); renderTree(); if (phone.matches) window.scrollTo({ top: 0, behavior: "smooth" }); }
+}
+function renderTree() {
+  const rows = [];
+  const walk = (p, depth) => {
+    const open = S.expanded.has(p.id), hasKids = kids(p.id).length > 0, cnt = UNDER[p.id].length;
+    rows.push(`<div class="trow ${depth === 0 ? "root" : ""} ${S.sel === p.id ? "sel" : ""} ${open ? "open" : ""}" style="--pad:${4 + depth * 18}px" role="button" tabindex="0" data-a="node" data-v="${p.id}" ${hasKids ? `aria-expanded="${open}"` : ""}>
+      <span class="tog ${hasKids ? "" : "none"}" data-a="toggle" data-v="${p.id}" aria-label="展開或收合">${ic("caretRight")}</span>
+      <span class="nm">${esc(p.name)}</span><span class="kd">${p.kind}</span><span class="cnt ${cnt ? "" : "z"}">${cnt || "–"}</span></div>`);
+    if (open) kids(p.id).forEach(k => walk(k, depth + 1));
+  };
+  ROOTS.forEach(rt => walk(rt, 0));
+  $("#trows").innerHTML = rows.join("");
+
+  const node = byId[S.sel], subIds = subtree(node.id);
+  const all = [...UNDER[node.id]].sort((a, b) => b.published.localeCompare(a.published));
+  const direct = DOCS.filter(d => d.products.includes(node.id)).length;
+  $("#ndet").innerHTML = `
+    <div class="stack" style="gap:6px">
+      <div class="crumbs">${ancestors(node.id).slice(1).reverse().map(id => `<button type="button" data-a="node" data-v="${id}">${esc(byId[id].name)}</button>${ic("caretRight")}`).join("")}</div>
+      <div class="ntitle"><h2>${esc(node.name)}</h2><span class="tagb">${KIND[node.kind]}</span><small>#${node.id}</small></div>
+      ${node.aliases && node.aliases.length ? `<span class="note" style="font-size:12.5px">別名：${node.aliases.map(esc).join("、")}</span>` : ""}
+    </div>
+    <div class="stats3"><div><b>${direct}</b><span>直接掛載</span></div><div><b class="f">${all.length}</b><span>含子節點</span></div><div><b>${subIds.length}</b><span>展開節點</span></div></div>
+    <p class="note">搜尋提到「${esc(node.name)}」時，系統沿 parent_id 往下展開 ${subIds.length} 個節點，掛在其中任一節點的文件都算符合。</p>
+    ${all.length ? `<div class="mini">${all.map(d => { const isDirect = d.products.includes(node.id); const via = d.products.filter(p => subIds.includes(p)).map(p => byId[p].name);
+      return `<div class="mitem" role="button" tabindex="0" data-a="open" data-v="${d.id}"><div class="m"><span class="badge">${TYPE_LABEL[d.doc_type]}</span><span class="mono">${d.published}</span><span class="via ${isDirect ? "" : "f"}">${isDirect ? "直接掛載" : "經由 " + via.map(esc).join("、")}</span></div><span class="t">${esc(d.title)}</span></div>`; }).join("")}</div>`
+      : `<span class="note s" style="font-size:13px">這個節點底下沒有文件。</span>`}`;
+}
+
+// ---------- 資料表 ----------
+const TABLES = {
+  product: { cols: "48px 76px minmax(140px,1fr) 80px", minW: 420, head: ["id", "parent_id", "name", "kind"], rows: PRODUCTS,
+    cells: p => [[p.id, "c-m"], [p.parent_id ?? "null", "c-m " + (p.parent_id ? "c-f" : "c-x")], [p.name, ""], [p.kind, "c-m c-d"]] },
+  document: { cols: "40px minmax(220px,1.6fr) 90px 92px minmax(190px,1fr) minmax(120px,1fr)", minW: 860, head: ["id", "title", "doc_type", "published", "file_uri", "tags"], rows: DOCS,
+    cells: d => [[d.id, "c-m"], [d.title, ""], [d.doc_type, "c-m c-d"], [d.published, "c-m"], [`s3://product-docs/${d.id}.pdf`, "c-m c-d"], [d.tags.join(", "), "c-d"]] },
+  document_product: { cols: "96px 84px minmax(260px,1fr)", minW: 500, head: ["document_id", "product_id", "// 對應到"], rows: DOC_PRODUCT,
+    cells: x => [[x.document_id, "c-m c-f"], [x.product_id, "c-m c-f"], [`${DOCS.find(d => d.id === x.document_id).title} → ${pathOf(x.product_id)}`, "c-d"]] },
+  chunk: { cols: "44px 90px minmax(260px,1fr) 152px", minW: 620, head: ["id", "document_id", "content", "embedding"], rows: CHUNKS,
+    cells: c => [[c.id, "c-m"], [c.document_id, "c-m c-f"], [c.content, ""], [null, c.embedding]] },
+};
+function renderSchema() {
+  $("#cP").textContent = PRODUCTS.length + " 列"; $("#cD").textContent = DOCS.length + " 列"; $("#cDP").textContent = DOC_PRODUCT.length + " 列"; $("#cC").textContent = CHUNKS.length + " 列";
+  $("#embNote").textContent = `vector(1024)，示範用 ${DIMS.length} 維`;
+  $("#sTabs").innerHTML = Object.keys(TABLES).map(k => `<button type="button" class="tab mono ${S.sTab === k ? "on" : ""}" style="font-size:12.5px;height:38px;padding:0 12px" data-a="stab" data-v="${k}">${k}<span class="n" style="font-size:11px">${TABLES[k].rows.length}</span></button>`).join("");
+  $("#dimLegend").hidden = S.sTab !== "chunk";
+  $("#dimLegend").innerHTML = `<span style="color:var(--dim)">embedding 色塊依序：</span>` + DIMS.map((d, i) => `<span><b>${i + 1}</b> ${d.k}</span>`).join("");
+  const t = TABLES[S.sTab];
+  const row = (cells, cls = "") => `<div class="tgrid ${cls}" style="grid-template-columns:${t.cols}">${cells}</div>`;
+  $("#sTable").innerHTML = `<div style="min-width:${t.minW}px">` + row(t.head.map(h => `<span>${esc(h)}</span>`).join(""), "h") +
+    t.rows.slice(0, S.sLimit).map(x => row(t.cells(x).map(([v, c]) => v === null ? heatHTML(c) : `<span class="${c}">${esc(v)}</span>`).join(""))).join("") + `</div>`;
+  const rest = t.rows.length - S.sLimit;
+  $("#sMore").hidden = rest <= 0;
+  $("#sMore").textContent = `顯示更多（還有 ${rest} 列）`;
+}
+
+// ---------- 文件詳情抽屜 ----------
+let lastFocus = null;
+function openDoc(id, fromSearch) {
+  lastFocus = document.activeElement;
+  Object.assign(S, { drawer: true, docId: id, fromSearch: !!fromSearch, dTab: "overview" });
+  renderDrawer();
+  $("#drawer").classList.add("on"); $("#scrim").classList.add("on");
+  document.body.style.overflow = "hidden";
+  setTimeout(() => { const x = $("#drawer .x"); if (x) x.focus({ preventScroll: true }); }, 50);
+}
+function closeDrawer() {
+  if (!S.drawer) return;
+  S.drawer = false;
+  $("#drawer").classList.remove("on"); $("#scrim").classList.remove("on");
+  document.body.style.overflow = "";
+  if (lastFocus && document.contains(lastFocus)) lastFocus.focus({ preventScroll: true });
+}
+function renderDrawer() {
+  const d = DOCS.find(x => x.id === S.docId); if (!d) return;
+  const r = S.r, chunks = CHUNKS.filter(c => c.document_id === d.id);
+  const useQ = S.fromSearch && r && r.hasSem;
+  const scored = chunks.map(c => ({ c, sc: useQ ? cos(r.qv, c.embedding) : null }));
+  const best = useQ ? [...scored].sort((a, b) => b.sc - a.sc)[0] : null;
+  const uri = `s3://product-docs/${d.id}.pdf`;
+  let body = "";
+  if (S.dTab === "overview") {
+    body = `${best ? `<div class="best"><small>本次查詢命中段落 · chunk #${best.c.id} · 相似度 ${best.sc.toFixed(2)}</small><p>${segs(best.c.content, r.qv)}</p></div>` : ""}
+      <div class="kv"><span>類型</span><span class="mono" style="font-size:12.5px">${d.doc_type}</span><span>發布日期</span><span class="mono" style="font-size:12.5px">${d.published}</span>
+        <span>檔案位置</span><span class="uri">${uri}</span><span>標籤</span><span class="tagl">${d.tags.map(t => `<span>${esc(t)}</span>`).join("")}</span></div>
+      <div class="plinks"><span>掛載產品 · ${d.products.length}</span>${d.products.map(p => `<button type="button" class="plink" data-a="node" data-v="${p}">${ic("tree")}<span>${esc(pathOf(p))}</span>${ic("upRight")}</button>`).join("")}</div>`;
+  } else if (S.dTab === "chunks") {
+    body = scored.map(({ c, sc }) => { const isBest = best && best.c.id === c.id; return `<div class="ck ${isBest ? "best-c" : ""}"><div class="ck-m"><span>chunk #${c.id}</span><span>· index ${c.chunk_index}</span>${sc !== null ? `<b>相似度 ${sc.toFixed(2)}</b>` : ""}</div><p>${segs(c.content, useQ ? r.qv : null)}</p>${heatHTML(c.embedding)}</div>`; }).join("");
+  } else {
+    const raw = [["document（1 列）", { id: d.id, title: d.title, file_uri: uri, doc_type: d.doc_type, published: d.published, tags: d.tags }],
+      [`document_product（${d.products.length} 列）`, DOC_PRODUCT.filter(x => x.document_id === d.id).map(x => ({ ...x, "// 產品": pathOf(x.product_id) }))],
+      [`chunk（${chunks.length} 列）`, chunks]];
+    body = `<p class="note">這份文件在資料庫裡實際的樣子。PDF 本體不進資料庫，只記 file_uri。</p>` + raw.map(([l, o]) => `<div class="raw"><span>${l}</span><pre>${esc(fmtJSON(o))}</pre></div>`).join("");
+  }
+  $("#drawer").innerHTML = `<div class="grip"></div>
+    <div class="dw-h">
+      <div class="dw-meta"><span class="badge">${TYPE_LABEL[d.doc_type]}</span><span class="mono">${d.published}</span><span class="mono" style="color:var(--dim)">document #${d.id}</span>
+        <button type="button" class="ghost x" data-a="close" aria-label="關閉">${ic("x")}</button></div>
+      <h2>${esc(d.title)}</h2>
+      <div class="tabs" role="tablist">${[["overview", "概覽"], ["chunks", `段落 ${chunks.length}`], ["raw", "原始資料"]].map(([id, l]) => `<button type="button" role="tab" aria-selected="${S.dTab === id}" class="tab ${S.dTab === id ? "on" : ""}" data-a="dtab" data-v="${id}">${l}</button>`).join("")}</div>
+    </div>
+    <div class="dw-b">${body}</div>`;
+}
+
+// ---------- 事件 ----------
+document.addEventListener("click", e => {
+  const el = e.target.closest("[data-a]"); if (!el) return;
+  const a = el.dataset.a, v = el.dataset.v;
+  if (a === "nav") go(v);
+  else if (a === "ex") runSearch(v);
+  else if (a === "low") { S.showLow = !S.showLow; renderSearch(); }
+  else if (a === "insTab") { S.insTab = v; renderIns(); }
+  else if (a === "open") openDoc(+v, el.dataset.fs === "1");
+  else if (a === "close") closeDrawer();
+  else if (a === "dtab") { S.dTab = v; renderDrawer(); }
+  else if (a === "sort") { S.dSort = v; renderDocs(); }
+  else if (a === "dtype") { S.dType = v; renderDocs(); }
+  else if (a === "toggle") { S.expanded.has(+v) ? S.expanded.delete(+v) : S.expanded.add(+v); renderTree(); }
+  else if (a === "node") { const id = +v; if (kids(id).length) S.expanded.add(id); selectNode(id); }
+  else if (a === "expand") { S.expanded = new Set(PRODUCTS.map(p => p.id)); renderTree(); }
+  else if (a === "collapse") { S.expanded = new Set(); renderTree(); }
+  else if (a === "stab") { S.sTab = v; S.sLimit = 30; renderSchema(); }
+  else if (a === "smore") { S.sLimit += 60; renderSchema(); }
+});
+$("#insToggle").addEventListener("click", () => { if (phone.matches) { S.insOpen = !S.insOpen; renderIns(); } });
+$("#sform").addEventListener("submit", e => { e.preventDefault(); runSearch($("#q").value); });
+$("#dtext").addEventListener("input", e => { S.dText = e.target.value; renderDocList(); });
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && S.drawer) { closeDrawer(); return; }
+  const tag = document.activeElement && document.activeElement.tagName;
+  if (e.key === "/" && tag !== "INPUT" && tag !== "TEXTAREA") { e.preventDefault(); if (S.view !== "search") go("search"); $("#q").focus(); return; }
+  if ((e.key === "Enter" || e.key === " ") && e.target.matches && e.target.matches('[role="button"][data-a]')) { e.preventDefault(); e.target.click(); }
+});
+phone.addEventListener("change", () => { if (S.r) renderIns(); });
+window.addEventListener("hashchange", () => { const v = location.hash.slice(1); if (v !== S.view) go(v); });
+
+runSearch(EXAMPLES[0]);
+go(location.hash.slice(1) || "search", { keepScroll: true });
+</script>

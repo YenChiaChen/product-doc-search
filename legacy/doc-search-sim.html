@@ -1,0 +1,694 @@
+<title>文件搜尋模擬器</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: 上方查詢列，下方左欄「系統怎麼處理」、右欄「結果」。琥珀色＝結構化篩選，青綠色＝語意向量 */
+:root {
+  --bg: #F3F4F7; --surface: #FFFFFF; --sunken: #EBEDF2;
+  --fg: #161922; --muted: #5C6375; --line: #DADEE6;
+  --accent: #3446D6; --accent-soft: #E4E7FB;
+  --filter: #A85A12; --filter-soft: #FBEBD9;
+  --vec: #0B8475; --vec-soft: #D6F1EC;
+  --dim: #9AA0AE;
+  --font-body: "Noto Sans TC", system-ui, -apple-system, "PingFang TC", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #101218; --surface: #181B23; --sunken: #13151C;
+  --fg: #E6E8EE; --muted: #9AA1B2; --line: #2A2F3B;
+  --accent: #8592FF; --accent-soft: #232845;
+  --filter: #E5A25E; --filter-soft: #3A2A1A;
+  --vec: #41C9B2; --vec-soft: #143430;
+  --dim: #5D6372; color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --bg: #101218; --surface: #181B23; --sunken: #13151C;
+  --fg: #E6E8EE; --muted: #9AA1B2; --line: #2A2F3B;
+  --accent: #8592FF; --accent-soft: #232845;
+  --filter: #E5A25E; --filter-soft: #3A2A1A;
+  --vec: #41C9B2; --vec-soft: #143430;
+  --dim: #5D6372; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.6; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-block: 24px 64px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+header.top { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px 24px; }
+h1 { font-size: 26px; margin: 0; letter-spacing: .01em; text-wrap: balance; }
+.sub { color: var(--muted); margin: 4px 0 0; font-size: 14px; }
+.tabs { display: flex; gap: 4px; background: var(--sunken); padding: 4px; border-radius: 10px; }
+.tabs button { border: 0; background: none; color: var(--muted); font: inherit; font-weight: 500; padding: 6px 16px; border-radius: 7px; cursor: pointer; }
+.tabs button[aria-selected="true"] { background: var(--surface); color: var(--fg); box-shadow: 0 1px 2px rgb(0 0 0 / .08); }
+button:focus-visible, input:focus-visible, .chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--muted); margin-top: 14px; }
+.legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+.legend .lf::before { background: var(--filter); }
+.legend .lv::before { background: var(--vec); }
+.note { font-size: 13px; color: var(--muted); }
+
+/* search bar */
+.searchbar { margin-top: 20px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px; display: grid; gap: 12px; }
+.searchrow { display: flex; gap: 8px; }
+.searchrow input { flex: 1; min-width: 0; font: inherit; font-size: 17px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--fg); }
+.searchrow button { font: inherit; font-weight: 700; padding: 0 20px; border: 0; border-radius: 10px; background: var(--accent); color: var(--surface); cursor: pointer; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.chips .lbl { font-size: 13px; color: var(--muted); margin-right: 2px; }
+.chip { font: inherit; font-size: 13px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); padding: 3px 11px; border-radius: 999px; cursor: pointer; }
+.chip:hover { border-color: var(--accent); color: var(--accent); }
+
+/* main grid */
+.grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 20px; margin-top: 20px; align-items: start; }
+@media (max-width: 880px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+.col { display: grid; gap: 14px; min-width: 0; }
+.coltitle { font-size: 12px; font-weight: 700; letter-spacing: .08em; color: var(--muted); margin: 0; }
+.step { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; min-width: 0; }
+.step h3 { margin: 0 0 8px; font-size: 15px; display: flex; gap: 8px; align-items: baseline; }
+.step h3 .n { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+.step.f { border-left: 3px solid var(--filter); }
+.step.v { border-left: 3px solid var(--vec); }
+.step p { margin: 0 0 8px; font-size: 13.5px; color: var(--muted); }
+pre.code { margin: 0; font-family: var(--font-mono); font-size: 12.5px; line-height: 1.55; background: var(--sunken); border-radius: 8px; padding: 10px 12px; overflow-x: auto; white-space: pre; }
+.k-f { color: var(--filter); font-weight: 600; }
+.k-v { color: var(--vec); font-weight: 600; }
+
+/* tree */
+ul.tree, ul.tree ul { list-style: none; margin: 0; padding-left: 16px; }
+ul.tree { padding-left: 0; font-size: 13.5px; }
+ul.tree li { position: relative; }
+ul.tree ul li::before { content: ""; position: absolute; left: -11px; top: 0; bottom: 50%; width: 8px; border-left: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.node { display: inline-flex; gap: 6px; align-items: baseline; padding: 1px 6px; border-radius: 5px; color: var(--muted); }
+.node .kind { font-family: var(--font-mono); font-size: 10.5px; color: var(--dim); }
+.node .id { font-family: var(--font-mono); font-size: 11px; color: var(--dim); }
+.node.in { color: var(--fg); background: var(--filter-soft); }
+.node.hit { color: var(--filter); background: var(--filter-soft); font-weight: 700; outline: 1px solid var(--filter); }
+.tree.plain .node { color: var(--fg); }
+
+/* vector bars */
+.vbars { display: grid; grid-template-columns: auto 1fr auto; gap: 3px 10px; align-items: center; font-size: 12.5px; }
+.vbars .lab { color: var(--muted); white-space: nowrap; }
+.vbars .track { height: 8px; background: var(--sunken); border-radius: 4px; overflow: hidden; }
+.vbars .bar { height: 100%; background: var(--vec); border-radius: 4px; }
+.vbars .val { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
+
+/* results */
+.summary { display: flex; flex-wrap: wrap; gap: 8px; }
+.stat { flex: 1 1 160px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; }
+.stat .big { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.stat .cap { font-size: 12.5px; color: var(--muted); }
+.stat.v .big { color: var(--vec); }
+.stat.k .big { color: var(--muted); }
+.result { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: grid; gap: 8px; min-width: 0; }
+.result.low { opacity: .55; }
+.rhead { display: flex; gap: 10px; justify-content: space-between; align-items: start; }
+.rtitle { font-weight: 700; font-size: 16px; margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12.5px; color: var(--muted); }
+.badge { font-family: var(--font-mono); font-size: 11.5px; padding: 1px 7px; border-radius: 5px; background: var(--accent-soft); color: var(--accent); }
+.crumb { font-size: 12.5px; color: var(--filter); }
+.score { text-align: right; flex: none; }
+.score .num { font-family: var(--font-mono); font-weight: 600; color: var(--vec); font-variant-numeric: tabular-nums; }
+.score .lab { display: block; font-size: 11px; color: var(--muted); }
+.scorebar { height: 4px; background: var(--sunken); border-radius: 2px; overflow: hidden; }
+.scorebar div { height: 100%; background: var(--vec); }
+.snippet { font-size: 14px; background: var(--sunken); border-radius: 8px; padding: 8px 12px; margin: 0; }
+.snippet .src { display: block; font-family: var(--font-mono); font-size: 11px; color: var(--dim); margin-bottom: 2px; }
+mark { background: var(--vec-soft); color: var(--vec); font-weight: 700; border-radius: 3px; padding: 0 2px; }
+.linkbtn { justify-self: start; font: inherit; font-size: 13px; border: 1px solid var(--line); background: none; color: var(--accent); padding: 3px 10px; border-radius: 7px; cursor: pointer; }
+.divider { font-size: 12.5px; color: var(--muted); display: flex; align-items: center; gap: 10px; }
+.divider::before, .divider::after { content: ""; flex: 1; border-top: 1px dashed var(--line); }
+.empty { padding: 24px; text-align: center; color: var(--muted); background: var(--surface); border: 1px dashed var(--line); border-radius: 12px; }
+
+/* data tab */
+.section { margin-top: 28px; }
+.section h2 { font-size: 18px; margin: 0 0 4px; }
+.section > p { margin: 0 0 12px; color: var(--muted); font-size: 14px; max-width: 70ch; }
+.schemas { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.schema { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.schema h4 { margin: 0; padding: 8px 12px; font-family: var(--font-mono); font-size: 14px; background: var(--sunken); display: flex; justify-content: space-between; }
+.schema h4 span { font-family: var(--font-body); font-weight: 400; font-size: 12px; color: var(--muted); }
+.schema dl { margin: 0; padding: 8px 12px; display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; font-size: 12.5px; }
+.schema dt { font-family: var(--font-mono); }
+.schema dd { margin: 0; color: var(--muted); }
+.fk { color: var(--filter); }
+.twocol { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+@media (max-width: 760px) { .twocol { grid-template-columns: minmax(0, 1fr); } }
+.tablebox { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow-x: auto; max-height: 520px; overflow-y: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { position: sticky; top: 0; background: var(--sunken); font-family: var(--font-mono); font-weight: 600; font-size: 12px; white-space: nowrap; }
+td.mono { font-family: var(--font-mono); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.heat { display: inline-flex; gap: 2px; }
+.heat i { width: 12px; height: 16px; border-radius: 2px; background: var(--vec); }
+
+dialog { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--fg); padding: 0; width: min(760px, calc(100vw - 32px)); max-height: 85vh; }
+dialog::backdrop { background: rgb(10 12 20 / .5); }
+.dhead { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--surface); }
+.dhead h3 { margin: 0; font-size: 16px; }
+.dbody { padding: 12px 16px 16px; display: grid; gap: 12px; }
+.dbody h4 { margin: 0 0 4px; font-family: var(--font-mono); font-size: 13px; color: var(--muted); }
+@media (prefers-reduced-motion: no-preference) { .result { animation: rise .25s ease both; } @keyframes rise { from { transform: translateY(4px); } } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>文件搜尋模擬器</h1>
+      <p class="sub">產品文件 metadata 篩選加上語意向量搜尋的完整流程。資料皆為示範用，規格僅供示意。</p>
+    </div>
+    <div class="tabs" role="tablist">
+      <button role="tab" id="tab-search" aria-selected="true" data-view="search">搜尋模擬</button>
+      <button role="tab" id="tab-data" aria-selected="false" data-view="data">資料格式</button>
+    </div>
+  </header>
+  <div class="legend"><span class="lf">結構化篩選：產品樹、年份、文件類型</span><span class="lv">語意搜尋：embedding 向量相似度</span></div>
+
+  <main id="view-search">
+    <form class="searchbar" id="form">
+      <div class="searchrow">
+        <input id="q" type="search" autocomplete="off" aria-label="搜尋文件" placeholder="用一句話描述你要找的文件">
+        <button type="submit">搜尋</button>
+      </div>
+      <div class="chips" id="chips"><span class="lbl">試試看</span></div>
+    </form>
+    <div class="grid">
+      <section class="col" id="pipeline" aria-label="系統處理步驟"></section>
+      <section class="col" id="results" aria-label="搜尋結果"></section>
+    </div>
+  </main>
+
+  <main id="view-data" hidden></main>
+</div>
+
+<dialog id="raw">
+  <div class="dhead"><h3 id="rawtitle">原始資料</h3><button class="linkbtn" id="rawclose">關閉</button></div>
+  <div class="dbody" id="rawbody"></div>
+</dialog>
+
+<script>
+// ---------- 示範資料 ----------
+const PRODUCTS = [
+  { id: 1,  parent_id: null, name: "Intel", kind: "vendor", aliases: ["英特爾"] },
+  { id: 2,  parent_id: 1,  name: "CPU", kind: "category", aliases: ["處理器"] },
+  { id: 3,  parent_id: 2,  name: "Core Ultra 200", kind: "series" },
+  { id: 4,  parent_id: 3,  name: "Core Ultra 9 285K", kind: "sku", aliases: ["285k"] },
+  { id: 5,  parent_id: 3,  name: "Core Ultra 7 265K", kind: "sku", aliases: ["265k"] },
+  { id: 6,  parent_id: 2,  name: "Panther Lake", kind: "series" },
+  { id: 7,  parent_id: 6,  name: "Core Ultra X9 388H", kind: "sku", aliases: ["388h"] },
+  { id: 8,  parent_id: 1,  name: "GPU", kind: "category", aliases: ["顯卡", "顯示卡"] },
+  { id: 9,  parent_id: 8,  name: "Arc B580", kind: "sku" },
+  { id: 19, parent_id: null, name: "AMD", kind: "vendor" },
+  { id: 20, parent_id: 19, name: "CPU", kind: "category", aliases: ["處理器"] },
+  { id: 21, parent_id: 20, name: "Ryzen AI 300", kind: "series" },
+  { id: 22, parent_id: 21, name: "Ryzen AI 9 HX 370", kind: "sku", aliases: ["hx 370"] },
+  { id: 10, parent_id: null, name: "ASUS", kind: "vendor", aliases: ["華碩"] },
+  { id: 11, parent_id: 10, name: "筆電", kind: "category", aliases: ["筆記型電腦", "laptop"] },
+  { id: 12, parent_id: 11, name: "ZenBook Duo", kind: "sku" },
+  { id: 23, parent_id: 11, name: "ZenBook 14 ScreenPad", kind: "sku" },
+  { id: 13, parent_id: 11, name: "ROG Zephyrus G14", kind: "sku" },
+  { id: 14, parent_id: 11, name: "Vivobook S14", kind: "sku" },
+  { id: 15, parent_id: null, name: "Lenovo", kind: "vendor", aliases: ["聯想"] },
+  { id: 16, parent_id: 15, name: "筆電", kind: "category", aliases: ["筆記型電腦", "laptop"] },
+  { id: 17, parent_id: 16, name: "Yoga Book 9i", kind: "sku" },
+  { id: 18, parent_id: 16, name: "ThinkBook Plus Gen 5", kind: "sku" },
+];
+
+const DOCS = [
+  { id: 1, title: "Core Ultra 9 285K BIOS 組態指南", doc_type: "config", published: "2024-10-24", products: [4], tags: ["BIOS", "超頻"], chunks: [
+    "本指南說明 Core Ultra 9 285K 在 Z890 主機板上的 BIOS 組態，包含 P-core 與 E-core 倍頻、Power Limit 參數與記憶體 XMP 設定。",
+    "建議 PL1/PL2 預設 125W / 250W，若散熱不足可調低 TDP 以降低功耗與溫度。"] },
+  { id: 16, title: "Core Ultra 7 265K 記憶體組態說明", doc_type: "config", published: "2024-11-05", products: [5], tags: ["DDR5"], chunks: [
+    "Core Ultra 7 265K 支援 DDR5-6400，雙通道四插槽時建議於 BIOS 降為 DDR5-5600 以確保穩定。",
+    "CUDIMM 模組需在組態頁面啟用 Clock Driver 選項。"] },
+  { id: 2, title: "Core Ultra 200S 平台設計指南", doc_type: "datasheet", published: "2024-10-10", products: [3], tags: ["LGA1851"], chunks: [
+    "Core Ultra 200S 採 LGA1851 腳位，最多 24 核心（8P + 16E），內建 NPU 提供約 13 TOPS 的 AI 運算。",
+    "平台支援 PCIe 5.0 x16 顯示卡插槽與 Thunderbolt 4。"] },
+  { id: 3, title: "2026 Intel 用戶端 CPU 路線圖", doc_type: "roadmap", published: "2026-01-08", products: [2], tags: ["roadmap", "18A"], chunks: [
+    "2026 年 Intel 用戶端產品以 Panther Lake 為主軸，首度採用 Intel 18A 製程，行動平台全面升級。",
+    "桌上型平台預計下半年推出 Nova Lake，新世代的核心數與快取架構都會調整。"] },
+  { id: 4, title: "Panther Lake 架構白皮書", doc_type: "whitepaper", published: "2026-01-15", products: [6], tags: ["18A", "NPU"], chunks: [
+    "Panther Lake 結合新一代 P-core 與 E-core 架構，NPU 算力提升至 50 TOPS 等級，鎖定 AI PC 市場。",
+    "整合式 Xe3 GPU 支援光追與 XeSS，輕薄筆電也能執行主流遊戲。"] },
+  { id: 5, title: "Core Ultra X9 388H 電源組態設定", doc_type: "config", published: "2026-02-20", products: [7], tags: ["電源", "TDP"], chunks: [
+    "Core Ultra X9 388H 的基礎功耗為 25W，OEM 可在 BIOS 將 TDP 組態設定於 15W 至 45W 之間。",
+    "於省電模式下，系統會優先排程至低功耗 E-core，以延長電池續航。"] },
+  { id: 6, title: "Arc B580 驅動組態說明", doc_type: "config", published: "2025-01-20", products: [9], tags: ["驅動"], chunks: [
+    "Arc B580 顯示卡建議在 BIOS 啟用 Resizable BAR，以發揮完整效能。",
+    "驅動程式控制面板可設定 XeSS 2 與幀生成，提升遊戲幀率。"] },
+  { id: 7, title: "ZenBook Duo (2025) 規格書", doc_type: "datasheet", published: "2025-01-07", products: [12], tags: ["雙螢幕", "OLED"], chunks: [
+    "ZenBook Duo 由兩塊 14 吋 OLED 觸控螢幕組成雙螢幕設計，可上下延伸或左右並排使用。",
+    "附可拆式藍牙鍵盤，放在下方螢幕上即成為傳統筆電；拿開後兩塊螢幕皆可觸控與手寫。",
+    "搭載 Core Ultra 9 處理器，電池 75Wh，重量約 1.65 kg。"] },
+  { id: 15, title: "ZenBook 14 ScreenPad 規格書", doc_type: "datasheet", published: "2024-06-01", products: [23], tags: ["ScreenPad"], chunks: [
+    "觸控板內建 5.65 吋 ScreenPad 觸控板螢幕，可當計算機、數字鍵盤或第二螢幕使用。",
+    "ScreenPad 可將應用程式拖曳至觸控板上執行，延伸主螢幕的工作空間。"] },
+  { id: 8, title: "ROG Zephyrus G14 規格書", doc_type: "datasheet", published: "2025-02-10", products: [13], tags: ["電競", "OLED"], chunks: [
+    "14 吋 3K OLED 螢幕，120Hz 更新率，峰值亮度 500 nits。",
+    "上蓋外側配置 Slash Lighting 燈條，可自訂動畫效果。",
+    "搭載 RTX 4070 顯示卡，重量 1.5 kg，適合攜帶的電競筆電。"] },
+  { id: 14, title: "Vivobook S14 規格書", doc_type: "datasheet", published: "2025-04-01", products: [14], tags: ["輕薄"], chunks: [
+    "14 吋 OLED 螢幕，解析度 1920×1200，重量僅 1.3 kg 的輕薄筆電。",
+    "75Wh 大電池，官方續航可達 18 小時。"] },
+  { id: 9, title: "Yoga Book 9i 產品白皮書", doc_type: "whitepaper", published: "2025-03-03", products: [17], tags: ["雙螢幕", "觸控筆"], chunks: [
+    "Yoga Book 9i 配備兩片 13.3 吋 2.8K OLED 面板，可上下螢幕堆疊，也可立起成帳篷模式。",
+    "上下兩塊螢幕可分割顯示不同應用程式，大幅提升多工生產力。",
+    "附藍牙鍵盤與觸控筆，下方螢幕可模擬虛擬觸控板。"] },
+  { id: 10, title: "ThinkBook Plus Gen 5 Hybrid 規格書", doc_type: "datasheet", published: "2024-01-08", products: [18], tags: ["電子紙", "可拆式"], chunks: [
+    "上蓋外側配置一塊 12 吋彩色電子紙副螢幕，闔上筆電也能查看通知與行事曆。",
+    "螢幕部分可拆下成為獨立 Android 平板，鍵盤底座保留 Windows 系統。",
+    "電子紙顯示幾乎不耗電，大幅延長續航。"] },
+  { id: 11, title: "2026 AI PC 市場趨勢報告", doc_type: "whitepaper", published: "2026-03-10", products: [2, 20, 11, 16], tags: ["市場", "AI PC"], chunks: [
+    "2026 年 CPU 發展重點在 NPU：主流行動處理器皆達 40 TOPS 以上，AI PC 滲透率預估超過五成。",
+    "製程方面，Intel 18A 與 TSMC N3 世代產品將於 2026 年同時進入市場。",
+    "筆電形態上，雙螢幕與可折疊裝置仍屬利基市場，但出貨年增率明顯。"] },
+  { id: 12, title: "Ryzen AI 9 HX 370 BIOS 組態指南", doc_type: "config", published: "2024-08-20", products: [22], tags: ["BIOS"], chunks: [
+    "Ryzen AI 9 HX 370 可於 BIOS 設定 cTDP 15W 至 54W，OEM 依散熱設計調整組態。",
+    "NPU 預設啟用，提供 50 TOPS AI 運算，可在 BIOS 中關閉以節省功耗。"] },
+  { id: 13, title: "AMD 2026 行動處理器路線圖", doc_type: "roadmap", published: "2026-01-06", products: [20], tags: ["roadmap", "Zen 6"], chunks: [
+    "AMD 2026 年行動處理器路線圖以 Zen 6 架構為核心，預計導入 2 奈米製程。",
+    "新世代 Ryzen AI 系列將強化 NPU 與內顯效能，主攻輕薄 AI PC。"] },
+];
+
+// ---------- 擴充資料 ----------
+PRODUCTS.push(
+  { id: 24, parent_id: 2,  name: "Lunar Lake", kind: "series" },
+  { id: 25, parent_id: 24, name: "Core Ultra 7 258V", kind: "sku", aliases: ["258v"] },
+  { id: 26, parent_id: 8,  name: "Arc B570", kind: "sku" },
+  { id: 27, parent_id: 19, name: "GPU", kind: "category", aliases: ["顯卡", "顯示卡"] },
+  { id: 28, parent_id: 27, name: "Radeon RX 9070 XT", kind: "sku", aliases: ["9070 xt"] },
+  { id: 29, parent_id: 27, name: "Radeon RX 9060 XT", kind: "sku", aliases: ["9060 xt"] },
+  { id: 30, parent_id: 20, name: "Ryzen 9000", kind: "series" },
+  { id: 31, parent_id: 30, name: "Ryzen 9 9950X3D", kind: "sku", aliases: ["9950x3d"] },
+  { id: 32, parent_id: 20, name: "Ryzen AI Max", kind: "series" },
+  { id: 33, parent_id: 32, name: "Ryzen AI Max+ 395", kind: "sku" },
+  { id: 34, parent_id: null, name: "NVIDIA", kind: "vendor", aliases: ["輝達"] },
+  { id: 35, parent_id: 34, name: "GPU", kind: "category", aliases: ["顯卡", "顯示卡"] },
+  { id: 36, parent_id: 35, name: "GeForce RTX 50", kind: "series", aliases: ["rtx 50"] },
+  { id: 37, parent_id: 36, name: "RTX 5090", kind: "sku" },
+  { id: 38, parent_id: 36, name: "RTX 5070", kind: "sku" },
+  { id: 39, parent_id: null, name: "Qualcomm", kind: "vendor", aliases: ["高通", "snapdragon"] },
+  { id: 40, parent_id: 39, name: "CPU", kind: "category", aliases: ["處理器"] },
+  { id: 41, parent_id: 40, name: "Snapdragon X Elite", kind: "sku" },
+  { id: 42, parent_id: 40, name: "Snapdragon X2 Elite", kind: "sku" },
+  { id: 43, parent_id: null, name: "Apple", kind: "vendor", aliases: ["蘋果"] },
+  { id: 46, parent_id: 43, name: "CPU", kind: "category", aliases: ["處理器"] },
+  { id: 47, parent_id: 46, name: "M5", kind: "sku" },
+  { id: 44, parent_id: 43, name: "筆電", kind: "category", aliases: ["筆記型電腦", "laptop", "macbook"] },
+  { id: 45, parent_id: 44, name: "MacBook Pro 14", kind: "sku" },
+  { id: 48, parent_id: 11, name: "ROG Flow Z13", kind: "sku" },
+  { id: 49, parent_id: 10, name: "主機板", kind: "category", aliases: ["motherboard"] },
+  { id: 50, parent_id: 49, name: "ROG Maximus Z890 Hero", kind: "sku", aliases: ["z890"] },
+  { id: 51, parent_id: 49, name: "TUF Gaming B850", kind: "sku", aliases: ["b850"] },
+  { id: 52, parent_id: 16, name: "ThinkPad X1 Carbon Gen 13", kind: "sku", aliases: ["x1 carbon"] },
+  { id: 53, parent_id: 16, name: "Legion 7i", kind: "sku" },
+  { id: 54, parent_id: 16, name: "ThinkPad X1 Fold", kind: "sku", aliases: ["x1 fold"] },
+  { id: 55, parent_id: null, name: "Dell", kind: "vendor", aliases: ["戴爾"] },
+  { id: 56, parent_id: 55, name: "筆電", kind: "category", aliases: ["筆記型電腦", "laptop"] },
+  { id: 57, parent_id: 56, name: "XPS 13", kind: "sku" },
+  { id: 58, parent_id: 56, name: "XPS 14", kind: "sku" },
+  { id: 59, parent_id: null, name: "HP", kind: "vendor", aliases: ["惠普"] },
+  { id: 60, parent_id: 59, name: "筆電", kind: "category", aliases: ["筆記型電腦", "laptop"] },
+  { id: 61, parent_id: 60, name: "Spectre x360 14", kind: "sku", aliases: ["spectre"] },
+  { id: 62, parent_id: 60, name: "OmniBook Ultra 14", kind: "sku", aliases: ["omnibook"] },
+);
+
+DOCS.push(
+  { id: 17, title: "Lunar Lake 架構白皮書", doc_type: "whitepaper", published: "2024-09-03", products: [24], tags: ["NPU", "記憶體封裝"], chunks: [
+    "Lunar Lake 將 LPDDR5X 記憶體直接封裝在處理器上，縮小主機板面積並降低功耗。",
+    "NPU 4 提供 48 TOPS AI 算力，整合式 Xe2 GPU 支援 XeSS。",
+    "設計目標是輕薄筆電的電池續航，閒置功耗較前代大幅下降。"] },
+  { id: 18, title: "Core Ultra 7 258V 電源組態設定", doc_type: "config", published: "2024-10-01", products: [25], tags: ["TDP"], chunks: [
+    "Core Ultra 7 258V 基礎功耗 17W，OEM 可在 BIOS 將 TDP 組態設定為 8W 至 37W。",
+    "建議輕薄機種啟用 Dynamic Tuning，依溫度自動調整功耗上限。"] },
+  { id: 19, title: "Arc B570 規格書", doc_type: "datasheet", published: "2025-01-16", products: [26], tags: ["GDDR6"], chunks: [
+    "Arc B570 配備 10GB GDDR6 記憶體，支援 XeSS 2 與光追。",
+    "建議電源 450W，單一 8-pin 供電，雙風扇散熱。"] },
+  { id: 20, title: "Radeon RX 9070 XT 規格書", doc_type: "datasheet", published: "2025-03-06", products: [28], tags: ["RDNA 4"], chunks: [
+    "RX 9070 XT 採 RDNA 4 架構，16GB GDDR6，強化光追與 AI 加速單元。",
+    "整卡功耗 304W，建議電源 750W，三風扇散熱設計。",
+    "支援 FSR 4，以 AI 升頻提升遊戲幀率。"] },
+  { id: 21, title: "Radeon RX 9060 XT 驅動組態說明", doc_type: "config", published: "2025-06-05", products: [29], tags: ["驅動"], chunks: [
+    "Adrenalin 驅動可設定 FSR 4、Anti-Lag 與 HYPR-RX 一鍵最佳化。",
+    "建議於 BIOS 啟用 Smart Access Memory（Resizable BAR）。"] },
+  { id: 22, title: "AMD 2026 顯示卡路線圖", doc_type: "roadmap", published: "2026-02-12", products: [27], tags: ["roadmap"], chunks: [
+    "AMD 2026 年顯示卡路線圖以新一代架構為核心，光追與 AI 運算單元全面升級。",
+    "新世代產品預計採用 3 奈米級製程，並導入 GDDR7 記憶體。"] },
+  { id: 23, title: "Ryzen 9 9950X3D 超頻與組態指南", doc_type: "config", published: "2025-03-12", products: [31], tags: ["超頻", "3D V-Cache"], chunks: [
+    "Ryzen 9 9950X3D 支援 PBO 與 Curve Optimizer，可在 BIOS 中對每顆核心微調電壓。",
+    "第二代 3D V-Cache 移至核心下方，散熱改善後允許完整超頻。",
+    "建議搭配 DDR5-6000 CL30 並啟用 EXPO 設定。"] },
+  { id: 24, title: "Ryzen AI Max+ 395 平台白皮書", doc_type: "whitepaper", published: "2025-01-06", products: [33], tags: ["APU", "統一記憶體"], chunks: [
+    "Ryzen AI Max+ 395 整合 16 核心 Zen 5 與 40 CU 內顯，最高可配置 128GB 統一記憶體。",
+    "NPU 提供 50 TOPS，可在本機執行大型語言模型等 AI 工作負載。",
+    "適合輕薄工作站與小型桌機，可取代入門獨立顯示卡。"] },
+  { id: 25, title: "GeForce RTX 5090 規格書", doc_type: "datasheet", published: "2025-01-30", products: [37], tags: ["Blackwell", "GDDR7"], chunks: [
+    "RTX 5090 搭載 32GB GDDR7，採 Blackwell 架構，支援 DLSS 4 多幀生成。",
+    "整卡功耗 575W，公版採雙風扇雙槽散熱設計。",
+    "支援 PCIe 5.0 x16 與 DisplayPort 2.1b 連接埠。"] },
+  { id: 26, title: "GeForce RTX 5070 驅動組態說明", doc_type: "config", published: "2025-03-05", products: [38], tags: ["驅動", "DLSS"], chunks: [
+    "NVIDIA App 可設定 DLSS 覆寫，讓舊遊戲也能使用新版升頻模型。",
+    "建議在 3D 設定中將電源管理模式設為最佳效能，避免遊戲時降頻。"] },
+  { id: 27, title: "NVIDIA 2026 GPU 路線圖", doc_type: "roadmap", published: "2026-03-18", products: [35], tags: ["roadmap"], chunks: [
+    "NVIDIA 2026 年資料中心導入新世代架構，消費級顯示卡預計隔年跟進。",
+    "RTX 50 中期改款預計 2026 年推出，提升 GDDR7 容量。"] },
+  { id: 28, title: "RTX 50 系列散熱測試報告", doc_type: "test_report", published: "2025-04-20", products: [36], tags: ["散熱", "噪音"], chunks: [
+    "滿載 30 分鐘測試中，RTX 5090 核心溫度維持 72°C，風扇噪音約 41 dBA。",
+    "RTX 5070 在 ITX 機殼內溫度上升 8°C，仍未觸發降頻。"] },
+  { id: 29, title: "Snapdragon X Elite 規格書", doc_type: "datasheet", published: "2024-05-20", products: [41], tags: ["Arm", "Oryon"], chunks: [
+    "Snapdragon X Elite 採 12 核心 Oryon CPU，NPU 提供 45 TOPS AI 算力。",
+    "Arm 架構帶來極低待機功耗，筆電續航可達 20 小時以上。"] },
+  { id: 30, title: "Snapdragon X2 Elite 架構白皮書", doc_type: "whitepaper", published: "2025-09-24", products: [42], tags: ["Oryon"], chunks: [
+    "Snapdragon X2 Elite 採第二代 Oryon 核心與 3 奈米製程，最高 18 核心。",
+    "NPU 提升至 80 TOPS，搭載機種預計 2026 年上半年上市。"] },
+  { id: 31, title: "Snapdragon 筆電續航測試報告", doc_type: "test_report", published: "2025-11-02", products: [40, 11, 16], tags: ["續航", "相容性"], chunks: [
+    "影片播放測試中，Snapdragon X Elite 機種平均續航 21 小時，高於 x86 對照組。",
+    "高負載下仍有部分 x86 遊戲因模擬層而降頻或無法執行。"] },
+  { id: 32, title: "Apple M5 晶片技術簡介", doc_type: "whitepaper", published: "2025-10-15", products: [47], tags: ["3 奈米"], chunks: [
+    "M5 採第三代 3 奈米製程，每個 GPU 核心都加入神經網路加速器，AI 效能大幅提升。",
+    "統一記憶體頻寬提升至 153GB/s。"] },
+  { id: 33, title: "MacBook Pro 14 (M5) 規格書", doc_type: "datasheet", published: "2025-10-15", products: [45], tags: ["XDR"], chunks: [
+    "14.2 吋 Liquid Retina XDR 螢幕，峰值亮度 1600 nits，支援 120Hz 更新率。",
+    "電池續航最長 24 小時，重量 1.55 kg。",
+    "配備三個 Thunderbolt 4 連接埠、HDMI 與 SDXC 卡槽。"] },
+  { id: 34, title: "ROG Flow Z13 (2025) 規格書", doc_type: "datasheet", published: "2025-02-25", products: [48], tags: ["平板", "可拆式"], chunks: [
+    "13.4 吋 2.5K 180Hz 觸控螢幕，可拆式鍵盤讓它在平板與筆電之間切換。",
+    "搭載 Ryzen AI Max+ 395，內顯即可執行 3A 遊戲。",
+    "重量僅 1.2 kg，採均熱板散熱設計。"] },
+  { id: 35, title: "ROG Maximus Z890 Hero BIOS 設定手冊", doc_type: "manual", published: "2024-10-24", products: [50], tags: ["BIOS", "超頻"], chunks: [
+    "AI Overclocking 會依處理器體質與散熱器能力自動調整超頻參數。",
+    "記憶體頁面可一鍵載入 XMP 設定檔，並支援 CUDIMM。",
+    "背板提供兩個 Thunderbolt 4 連接埠與 Wi-Fi 7。"] },
+  { id: 36, title: "TUF Gaming B850 使用手冊", doc_type: "manual", published: "2025-01-10", products: [51], tags: ["AM5"], chunks: [
+    "安裝 Ryzen 9000 處理器前，請先將 BIOS 更新至最新版本。",
+    "M.2 插槽支援 PCIe 5.0，第一個插槽附散熱片。"] },
+  { id: 37, title: "ThinkPad X1 Carbon Gen 13 規格書", doc_type: "datasheet", published: "2024-11-20", products: [52], tags: ["輕薄", "商務"], chunks: [
+    "搭載 Core Ultra 7 258V，重量不到 1 kg，是最輕的一代 X1 Carbon。",
+    "14 吋 2.8K OLED 螢幕，選配低藍光面板。",
+    "電池 57Wh，續航可達 20 小時。"] },
+  { id: 38, title: "Legion 7i 散熱測試報告", doc_type: "test_report", published: "2025-05-08", products: [53], tags: ["散熱", "電競"], chunks: [
+    "Coldfront 散熱系統在滿載下維持 CPU 溫度 88°C，未出現明顯降頻。",
+    "效能模式風扇噪音 52 dBA，安靜模式則降至 38 dBA。"] },
+  { id: 39, title: "ThinkPad X1 Fold 規格書", doc_type: "datasheet", published: "2024-09-10", products: [54], tags: ["折疊螢幕"], chunks: [
+    "16.3 吋 OLED 折疊螢幕，展開是平板；對折後上下各一塊螢幕，就像雙螢幕筆電。",
+    "附磁吸藍牙鍵盤與觸控筆，可在桌面模式與平板模式之間切換。"] },
+  { id: 40, title: "XPS 13 (2025) 規格書", doc_type: "datasheet", published: "2025-01-07", products: [57], tags: ["輕薄"], chunks: [
+    "可選 Snapdragon X Elite 或 Core Ultra 處理器，重量 1.19 kg。",
+    "觸控功能列取代實體 F 鍵，搭配無縫玻璃觸控板。"] },
+  { id: 41, title: "XPS 14 使用手冊", doc_type: "manual", published: "2025-02-14", products: [58], tags: ["電源管理"], chunks: [
+    "透過 Dell Optimizer 可設定電源模式與散熱風扇曲線。",
+    "兩側共三個 Thunderbolt 4 連接埠，可外接兩台 4K 螢幕延伸工作空間。"] },
+  { id: 42, title: "Spectre x360 14 規格書", doc_type: "datasheet", published: "2024-06-12", products: [61], tags: ["翻轉", "觸控筆"], chunks: [
+    "360 度翻轉 OLED 觸控螢幕，可在筆電、帳篷與平板模式之間切換。",
+    "附 MPP 觸控筆，支援手寫與繪圖。"] },
+  { id: 43, title: "OmniBook Ultra 14 規格書", doc_type: "datasheet", published: "2025-01-07", products: [62], tags: ["AI PC"], chunks: [
+    "搭載 Ryzen AI 9 HX 375，NPU 提供 55 TOPS AI 算力。",
+    "重量 1.63 kg，提供兩個 USB4 連接埠。"] },
+  { id: 44, title: "2026 筆電形態趨勢報告", doc_type: "whitepaper", published: "2026-04-02", products: [11, 16, 56, 60, 44], tags: ["市場", "形態"], chunks: [
+    "2026 年筆電發展的關鍵字是 AI 與新形態：雙螢幕、折疊螢幕與可拆式機種都將擴大產品線。",
+    "輕薄機種重量普遍降至 1.2 kg 以下，續航以 20 小時為新標準。",
+    "高階機種全面導入 OLED 與高更新率螢幕，中階機種跟進。"] },
+  { id: 45, title: "下一代 x86 CPU 路線圖展望", doc_type: "roadmap", published: "2026-09-15", products: [2, 20], tags: ["roadmap"], chunks: [
+    "Intel 與 AMD 下一代架構預計 2027 年推出，兩者都將導入 2 奈米級製程。",
+    "NPU 算力目標超過 100 TOPS，AI 推論將成為處理器的標準工作負載。"] },
+  { id: 46, title: "Arc B580 遊戲效能測試報告", doc_type: "test_report", published: "2025-02-03", products: [9], tags: ["跑分"], chunks: [
+    "1440p 下 Arc B580 平均幀率較前代提升 70%，開啟 XeSS 2 後再增加 40%。",
+    "部分 DirectX 11 遊戲表現仍不穩定，建議更新至最新驅動。"] },
+  { id: 47, title: "Core Ultra 200S 0x114 微碼更新說明", doc_type: "config", published: "2025-01-15", products: [3], tags: ["微碼", "BIOS"], chunks: [
+    "0x114 微碼修正遊戲效能不穩，更新後需於 BIOS 套用 Intel Default Settings 電源組態。",
+    "部分主機板需同時更新 CSME 韌體才能發揮完整效能。"] },
+  { id: 48, title: "ZenBook Duo 使用手冊", doc_type: "manual", published: "2025-02-01", products: [12], tags: ["ScreenXpert"], chunks: [
+    "開啟 ScreenXpert 可將應用程式快速分割到上下兩塊螢幕。",
+    "鍵盤放在下方螢幕上時，系統會自動關閉下方螢幕以省電。",
+    "以觸控筆在任一螢幕上手寫，即可啟動筆記功能。"] },
+);
+
+// 模擬 embedding：真實模型輸出 1024 維、人看不懂的數字。這裡用十幾個看得懂的「概念維度」代替，
+// 每個維度由一組同義詞觸發，所以「小螢幕」「雙螢幕」「副螢幕」「ScreenPad」都落在同一個維度。
+const DIMS = [
+  { k: "副螢幕／多螢幕", terms: { "雙螢幕": 1, "副螢幕": 1, "小螢幕": 1, "第二螢幕": 1, "兩塊螢幕": 1, "上下螢幕": 1, "screenpad": 1, "電子紙": .8, "觸控板螢幕": 1, "額外螢幕": 1, "雙屏": 1, "多螢幕": 1, "一塊螢幕": .6, "折疊": .9 } },
+  { k: "顯示面板", terms: { "螢幕": .3, "oled": .5, "吋": .3, "解析度": .5, "nits": .4, "更新率": .5, "面板": .4 } },
+  { k: "CPU 演進", terms: { "發展": 1, "趨勢": .8, "roadmap": 1, "路線圖": 1, "製程": .8, "架構": .7, "世代": .7, "核心": .4 } },
+  { k: "AI／NPU", terms: { "ai": .6, "npu": 1, "tops": .8 } },
+  { k: "電源續航", terms: { "電池": 1, "續航": 1, "功耗": .8, "tdp": .8, "電源": .6, "省電": 1, "耗電": .8 } },
+  { k: "組態設定", terms: { "組態": 1, "bios": 1, "設定": .6, "參數": .6, "超頻": .7, "xmp": .6 } },
+  { k: "繪圖效能", terms: { "gpu": .8, "顯示卡": 1, "驅動": .7, "光追": .8, "遊戲": .6, "xess": .6 } },
+  { k: "攜帶性", terms: { "重量": 1, "輕薄": 1, "kg": .6, "攜帶": .8, "厚度": .7 } },
+  { k: "輸入裝置", terms: { "鍵盤": 1, "觸控板": .8, "觸控筆": .8, "手寫": .6 } },
+  { k: "多工效率", terms: { "多工": 1, "生產力": .8, "分割": .6, "延伸": .5, "並排": .6 } },
+  { k: "散熱", terms: { "散熱": 1, "溫度": .8, "風扇": .8, "均熱板": 1, "降頻": .8, "噪音": .5, "過熱": 1 } },
+  { k: "連接擴充", terms: { "thunderbolt": 1, "usb4": 1, "pcie": .8, "wi-fi": .7, "插槽": .6, "連接埠": 1, "hdmi": .6, "外接": .6 } },
+];
+
+const DOC_TYPE_RULES = [
+  { words: ["組態", "設定", "bios", "config"], types: ["config", "manual"] },
+  { words: ["規格", "spec", "datasheet"], types: ["datasheet"] },
+  { words: ["路線圖", "roadmap", "發展", "趨勢"], types: ["roadmap", "whitepaper"] },
+  { words: ["白皮書"], types: ["whitepaper"] },
+  { words: ["測試", "評測", "跑分", "benchmark"], types: ["test_report"] },
+  { words: ["手冊", "說明書", "manual"], types: ["manual"] },
+];
+const STOPWORDS = ["有沒有", "哪些", "推薦", "可以", "底下", "相關", "有關", "關於", "所有", "文件", "資料", "搜尋", "報告", "的", "帶", "有", "找", "年"];
+const EXAMPLES = ["帶小螢幕的筆電", "2026年CPU發展", "Core Ultra 200 底下的組態文件", "可以折疊的筆電", "RTX 50 散熱", "Snapdragon 續航", "主機板 BIOS 設定", "顯卡 測試報告", "2026 筆電發展", "省電 續航"];
+const RELEVANT = 0.4;
+
+// ---------- 工具 ----------
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const byId = Object.fromEntries(PRODUCTS.map(p => [p.id, p]));
+const kids = id => PRODUCTS.filter(p => p.parent_id === id);
+const subtree = id => [id, ...kids(id).flatMap(k => subtree(k.id))];
+const ancestors = id => { const a = []; for (let p = byId[id]; p; p = byId[p.parent_id]) a.push(p.id); return a; };
+const pathOf = id => ancestors(id).reverse().map(i => byId[i].name).join(" › ");
+const count = (t, term) => t.split(term).length - 1;
+const norm = v => Math.hypot(...v);
+function embed(text) {
+  const t = text.toLowerCase();
+  const raw = DIMS.map(d => Object.entries(d.terms).reduce((s, [term, w]) => s + w * count(t, term), 0));
+  const n = norm(raw);
+  return raw.map(x => n ? +(x / n).toFixed(3) : 0);
+}
+const cos = (a, b) => a.reduce((s, x, i) => s + x * b[i], 0); // 已正規化
+let cid = 0;
+const CHUNKS = DOCS.flatMap(d => d.chunks.map((content, i) => ({ id: ++cid, document_id: d.id, chunk_index: i, content, embedding: embed(content) })));
+const DOC_PRODUCT = DOCS.flatMap(d => d.products.map(p => ({ document_id: d.id, product_id: p })));
+
+// ---------- 模擬 LLM：把一句話拆成結構化條件 + 語意 ----------
+function parse(q) {
+  const lower = q.toLowerCase();
+  let rem = lower;
+  const ym = rem.match(/(20\d{2})\s*年?/);
+  const year = ym ? +ym[1] : null;
+  if (ym) rem = rem.replace(ym[0], " ");
+
+  const groups = {};
+  for (const p of PRODUCTS) for (const term of [p.name.toLowerCase(), ...(p.aliases || [])])
+    if (lower.includes(term)) (groups[term] ||= new Set()).add(p.id);
+  for (const term of Object.keys(groups).sort((a, b) => b.length - a.length)) rem = rem.split(term).join(" ");
+
+  const gs = Object.values(groups);
+  const all = [...new Set(gs.flatMap(g => [...g]))];
+  // 每個比對到的詞都要成立：Intel + CPU → 只留 Intel 底下的 CPU
+  const nodes = all.filter(n => gs.every(g => ancestors(n).some(a => g.has(a))))
+                   .filter((n, _, arr) => !arr.some(m => m !== n && ancestors(m).includes(n)));
+
+  const doc_types = [...new Set(DOC_TYPE_RULES.filter(r => r.words.some(w => lower.includes(w))).flatMap(r => r.types))];
+  for (const w of STOPWORDS) rem = rem.split(w).join(" ");
+  const semantic = rem.replace(/[\s,，、。?？!！]+/g, " ").trim();
+  return { products: nodes.map(n => pathOf(n)), _nodes: nodes, _terms: Object.keys(groups), year, doc_types, semantic };
+}
+
+function search(q) {
+  const P = parse(q);
+  const nodeSet = P._nodes.length ? new Set(P._nodes.flatMap(subtree)) : null;
+  const pass = d => (!nodeSet || d.products.some(p => nodeSet.has(p)))
+    && (!P.year || d.published.startsWith(String(P.year)))
+    && (!P.doc_types.length || P.doc_types.includes(d.doc_type));
+  const filtered = DOCS.filter(pass);
+  const qv = embed(P.semantic);
+  const hasSem = qv.some(x => x);
+  const scored = filtered.map(d => {
+    const cs = CHUNKS.filter(c => c.document_id === d.id).map(c => ({ c, s: hasSem ? cos(qv, c.embedding) : null }));
+    cs.sort((a, b) => (b.s ?? 0) - (a.s ?? 0));
+    return { d, best: cs[0].c, score: cs[0].s };
+  }).sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || b.d.published.localeCompare(a.d.published));
+  const kw = P.semantic.replace(/\s+/g, "");
+  const keywordHits = kw ? filtered.filter(d => d.chunks.some(c => c.toLowerCase().includes(kw))).length : null;
+  return { P, nodeSet, filtered, qv, hasSem, scored, kw, keywordHits };
+}
+
+// ---------- 畫面 ----------
+function treeHTML(nodeSet, hits, plain) {
+  const docCount = id => DOC_PRODUCT.filter(r => r.product_id === id).length;
+  const li = p => {
+    const cls = hits?.includes(p.id) ? "hit" : nodeSet?.has(p.id) ? "in" : "";
+    const ch = kids(p.id);
+    const dc = plain && docCount(p.id) ? ` <span class="kind">${docCount(p.id)} 份文件</span>` : "";
+    return `<li><span class="node ${cls}"><span class="id">#${p.id}</span>${esc(p.name)}<span class="kind">${p.kind}</span>${dc}</span>${ch.length ? `<ul>${ch.map(li).join("")}</ul>` : ""}</li>`;
+  };
+  let roots = PRODUCTS.filter(p => p.parent_id === null), more = "";
+  if (!plain) { // 搜尋步驟裡只展開有符合的廠商，其餘收合成一行
+    const keep = roots.filter(r => nodeSet && subtree(r.id).some(i => nodeSet.has(i)));
+    const rest = roots.filter(r => !keep.includes(r));
+    if (rest.length) more = `<p class="note" style="margin:6px 0 0">未符合、已收合：${rest.map(r => esc(r.name)).join("、")}</p>`;
+    roots = keep;
+  }
+  return `<ul class="tree ${plain ? "plain" : ""}">${roots.map(li).join("")}</ul>${more}`;
+}
+function vbars(v) {
+  return `<div class="vbars">${DIMS.map((d, i) => `<span class="lab">${d.k}</span><span class="track"><span class="bar" style="width:${Math.round(v[i] * 100)}%;display:block"></span></span><span class="val">${v[i].toFixed(2)}</span>`).join("")}</div>`;
+}
+function highlight(text, qv) {
+  const terms = DIMS.flatMap((d, i) => qv[i] > 0 ? Object.keys(d.terms) : []).sort((a, b) => b.length - a.length);
+  let out = esc(text);
+  if (!terms.length) return out;
+  const re = new RegExp(terms.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "gi");
+  return out.replace(re, m => `<mark>${m}</mark>`);
+}
+function sqlFor(r) {
+  const P = r.P, L = [];
+  if (P._nodes.length) L.push(`<span class="k-f">WITH RECURSIVE sub AS (\n  SELECT id FROM product WHERE id IN (${P._nodes.join(", ")})\n  UNION ALL\n  SELECT p.id FROM product p JOIN sub ON p.parent_id = sub.id\n)</span>`);
+  L.push(`SELECT d.id, d.title${r.hasSem ? `,\n       <span class="k-v">MIN(c.embedding &lt;=&gt; :query_vec) AS distance</span>` : ""}\nFROM document d`);
+  if (P._nodes.length) L.push(`<span class="k-f">JOIN document_product dp ON dp.document_id = d.id</span>`);
+  if (r.hasSem) L.push(`<span class="k-v">JOIN chunk c ON c.document_id = d.id</span>`);
+  const w = [];
+  if (P._nodes.length) w.push(`<span class="k-f">dp.product_id IN (SELECT id FROM sub)</span>`);
+  if (P.year) w.push(`<span class="k-f">d.published &gt;= '${P.year}-01-01' AND d.published &lt; '${P.year + 1}-01-01'</span>`);
+  if (P.doc_types.length) w.push(`<span class="k-f">d.doc_type IN (${P.doc_types.map(t => `'${t}'`).join(", ")})</span>`);
+  if (w.length) L.push("WHERE " + w.join("\n  AND "));
+  L.push(r.hasSem ? `GROUP BY d.id, d.title\n<span class="k-v">ORDER BY distance</span>` : "ORDER BY d.published DESC");
+  L.push("LIMIT 20;");
+  return L.join("\n");
+}
+
+function render(q) {
+  $("#q").value = q;
+  const r = search(q);
+  const P = r.P;
+  const shown = { products: P.products, year: P.year, doc_type: P.doc_types, semantic: P.semantic || null };
+  const json = JSON.stringify(shown, null, 2)
+    .replace(/("products"|"year"|"doc_type")/g, '<span class="k-f">$1</span>')
+    .replace(/("semantic")/g, '<span class="k-v">$1</span>');
+
+  $("#pipeline").innerHTML = `
+    <h2 class="coltitle">系統怎麼處理這句話</h2>
+    <div class="step">
+      <h3><span class="n">1</span>LLM 拆解查詢</h3>
+      <p>把一句話拆成兩部分：能精確篩選的條件，以及要靠語意理解的描述。這裡用規則模擬 LLM 的輸出。</p>
+      <pre class="code">${json}</pre>
+    </div>
+    <div class="step f">
+      <h3><span class="n">2</span>產品樹展開</h3>
+      <p>${P._nodes.length ? `比對到 <b>${P._nodes.length}</b> 個節點，往下展開共 <b>${r.nodeSet.size}</b> 個產品。文件只要掛在其中任一個，就算符合。` : "查詢沒有提到產品，所以不篩產品。"}</p>
+      ${treeHTML(r.nodeSet, P._nodes)}
+    </div>
+    <div class="step">
+      <h3><span class="n">3</span>產生 SQL</h3>
+      <pre class="code">${sqlFor(r)}</pre>
+    </div>
+    <div class="step v">
+      <h3><span class="n">4</span>查詢文字轉成向量</h3>
+      ${r.hasSem ? `<p>「${esc(P.semantic)}」被轉成下面這組數字，再和每個段落的向量比較方向是否接近（cosine 相似度）。真實模型有 1024 維，這裡用 ${DIMS.length} 個看得懂的維度示意。</p>${vbars(r.qv)}`
+        : `<p>${P.semantic ? `「${esc(P.semantic)}」不在示範詞庫裡，所以向量是零，結果只依日期排序。` : "篩選條件已經說完整個查詢，不需要語意排序，結果依日期排序。"}</p>`}
+    </div>`;
+
+  const rel = r.scored.filter(x => !r.hasSem || x.score >= RELEVANT);
+  const low = r.hasSem ? r.scored.filter(x => x.score < RELEVANT) : [];
+  const card = (x, isLow) => `
+    <article class="result ${isLow ? "low" : ""}">
+      <div class="rhead">
+        <div>
+          <h3 class="rtitle">${esc(x.d.title)}</h3>
+          <div class="meta"><span class="badge">${x.d.doc_type}</span><span>${x.d.published}</span>${x.d.tags.map(t => `<span>#${esc(t)}</span>`).join("")}</div>
+          <div class="crumb">${x.d.products.map(pathOf).map(esc).join("<br>")}</div>
+        </div>
+        ${x.score !== null ? `<div class="score"><span class="num">${x.score.toFixed(2)}</span><span class="lab">語意相似度</span></div>` : ""}
+      </div>
+      ${x.score !== null ? `<div class="scorebar"><div style="width:${Math.max(0, x.score) * 100}%"></div></div>` : ""}
+      <p class="snippet"><span class="src">chunk #${x.best.id}　最相關的段落</span>${highlight(x.best.content, r.qv)}</p>
+      <button class="linkbtn" data-doc="${x.d.id}">查看資料庫原始資料</button>
+    </article>`;
+
+  $("#results").innerHTML = `
+    <h2 class="coltitle">結果</h2>
+    <div class="summary">
+      <div class="stat"><div class="big">${DOCS.length} → ${r.filtered.length}</div><div class="cap">結構化篩選後剩下的文件</div></div>
+      ${r.hasSem ? `<div class="stat v"><div class="big">${rel.length}</div><div class="cap">語意相似度 ≥ ${RELEVANT}</div></div>` : ""}
+      ${r.kw ? `<div class="stat k"><div class="big">${r.keywordHits}</div><div class="cap">改用關鍵字 LIKE '%${esc(r.kw)}%'</div></div>` : ""}
+    </div>
+    ${rel.length ? rel.map(x => card(x, false)).join("") : `<div class="empty">沒有找到相關文件。換個說法，或點上方的範例試試。</div>`}
+    ${low.length ? `<div class="divider">通過篩選，但語意不相關（${low.length}）</div>${low.slice(0, 4).map(x => card(x, true)).join("")}${low.length > 4 ? `<p class="note">另有 ${low.length - 4} 份相似度更低的文件未列出。</p>` : ""}` : ""}`;
+}
+
+function showRaw(docId) {
+  const d = DOCS.find(x => x.id === docId);
+  const row = { id: d.id, title: d.title, file_uri: `s3://product-docs/${d.id}.pdf`, doc_type: d.doc_type, published: d.published, tags: d.tags };
+  const fmt = o => esc(JSON.stringify(o, null, 2).replace(/\[\s+([-\d.,\s]+?)\s+\]/g, (_, a) => "[" + a.replace(/\s+/g, " ") + "]"));
+  $("#rawtitle").textContent = d.title;
+  $("#rawbody").innerHTML = `
+    <p class="note">這份文件在資料庫裡實際長這樣。PDF 本體不進資料庫，只記 file_uri。</p>
+    <div><h4>document（1 列）</h4><pre class="code">${fmt(row)}</pre></div>
+    <div><h4>document_product（${d.products.length} 列）</h4><pre class="code">${fmt(DOC_PRODUCT.filter(r => r.document_id === d.id).map(r => ({ ...r, "// 產品": pathOf(r.product_id) })))}</pre></div>
+    <div><h4>chunk（${d.chunks.length} 列）</h4><pre class="code">${fmt(CHUNKS.filter(c => c.document_id === d.id))}</pre></div>`;
+  $("#raw").showModal();
+}
+
+function renderData() {
+  const table = (cols, rows) => `<div class="tablebox"><table><thead><tr>${cols.map(c => `<th>${c[0]}</th>`).join("")}</tr></thead><tbody>${rows.map(r => `<tr>${cols.map(c => `<td class="${c[2] || ""}">${c[1](r)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+  const heat = v => `<span class="heat" title="${v.join(", ")}">${v.map(x => `<i style="opacity:${(0.08 + x * 0.92).toFixed(2)}"></i>`).join("")}</span>`;
+  $("#view-data").innerHTML = `
+    <section class="section">
+      <h2>四張表</h2>
+      <p>檔案本體放在 NAS 或 S3，資料庫只記「去哪裡找」。分類靠產品樹加上多對多的對應表，搜尋則靠 chunk 上的向量。</p>
+      <div class="schemas">
+        <div class="schema"><h4>product <span>產品樹 · ${PRODUCTS.length} 列</span></h4><dl>
+          <dt>id</dt><dd>主鍵</dd><dt class="fk">parent_id</dt><dd>上一層產品，最上層為 null</dd><dt>name</dt><dd>Intel、CPU、Core Ultra 9 285K</dd><dt>kind</dt><dd>vendor / category / series / sku</dd></dl></div>
+        <div class="schema"><h4>document <span>文件 · ${DOCS.length} 列</span></h4><dl>
+          <dt>id</dt><dd>主鍵</dd><dt>title</dt><dd>標題</dd><dt>file_uri</dt><dd>檔案在 S3 / NAS 的位置</dd><dt>doc_type</dt><dd>config / datasheet / roadmap / whitepaper</dd><dt>published</dt><dd>發布日期</dd><dt>tags</dt><dd>LLM 自動產生，選填</dd></dl></div>
+        <div class="schema"><h4>document_product <span>對應 · ${DOC_PRODUCT.length} 列</span></h4><dl>
+          <dt class="fk">document_id</dt><dd>→ document.id</dd><dt class="fk">product_id</dt><dd>→ product.id</dd></dl>
+          <dl><dd style="grid-column:1/-1">一份文件可掛多個產品，例如「AI PC 趨勢報告」同時掛在 Intel CPU、AMD CPU 與兩個筆電分類。</dd></dl></div>
+        <div class="schema"><h4>chunk <span>段落 · ${CHUNKS.length} 列</span></h4><dl>
+          <dt class="fk">document_id</dt><dd>→ document.id</dd><dt>chunk_index</dt><dd>第幾段</dd><dt>content</dt><dd>原文段落</dd><dt>embedding</dt><dd>向量（真實為 vector(1024)）</dd></dl></div>
+      </div>
+    </section>
+    <section class="section">
+      <h2>product：產品樹</h2>
+      <p>每列只記自己的上一層。查「CPU 底下」時，系統沿 parent_id 往下展開，所以文件不必重複標記 Intel、CPU。</p>
+      <div class="twocol">
+        <div class="step">${treeHTML(null, null, true)}</div>
+        ${table([["id", r => r.id, "mono"], ["parent_id", r => r.parent_id ?? "null", "mono"], ["name", r => esc(r.name)], ["kind", r => r.kind, "mono"]], PRODUCTS)}
+      </div>
+    </section>
+    <section class="section">
+      <h2>document</h2>
+      ${table([["id", r => r.id, "mono"], ["title", r => esc(r.title)], ["doc_type", r => r.doc_type, "mono"], ["published", r => r.published, "mono"], ["file_uri", r => `s3://product-docs/${r.id}.pdf`, "mono"], ["tags", r => r.tags.map(esc).join(", ")]], DOCS)}
+    </section>
+    <section class="section">
+      <h2>document_product</h2>
+      ${table([["document_id", r => r.document_id, "mono"], ["product_id", r => r.product_id, "mono"], ["// 對應到", r => `${esc(DOCS.find(d => d.id === r.document_id).title)} → ${esc(pathOf(r.product_id))}`]], DOC_PRODUCT)}
+    </section>
+    <section class="section">
+      <h2>chunk</h2>
+      <p>每段文字各自轉成向量。下方色塊依序是 ${DIMS.length} 個示範維度（${DIMS.map(d => d.k).join("、")}），顏色越深代表該概念越強。真實 embedding 有 1024 維，數字無法直接解讀。</p>
+      ${table([["id", r => r.id, "mono"], ["document_id", r => r.document_id, "mono"], ["content", r => esc(r.content)], ["embedding", r => heat(r.embedding)]], CHUNKS)}
+    </section>`;
+}
+
+// ---------- 事件 ----------
+$("#chips").insertAdjacentHTML("beforeend", EXAMPLES.map(e => `<button type="button" class="chip">${esc(e)}</button>`).join(""));
+$("#chips").addEventListener("click", e => { if (e.target.classList.contains("chip")) render(e.target.textContent); });
+$("#form").addEventListener("submit", e => { e.preventDefault(); const q = $("#q").value.trim(); if (q) render(q); });
+$("#results").addEventListener("click", e => { const b = e.target.closest("[data-doc]"); if (b) showRaw(+b.dataset.doc); });
+$("#rawclose").addEventListener("click", () => $("#raw").close());
+$("#raw").addEventListener("click", e => { if (e.target === e.currentTarget) e.currentTarget.close(); });
+
+function show(view) {
+  for (const b of document.querySelectorAll(".tabs button")) b.setAttribute("aria-selected", b.dataset.view === view);
+  $("#view-search").hidden = view !== "search";
+  $("#view-data").hidden = view !== "data";
+}
+document.querySelector(".tabs").addEventListener("click", e => { const v = e.target.dataset?.view; if (v) { location.hash = v; show(v); } });
+window.addEventListener("hashchange", () => show(location.hash === "#data" ? "data" : "search"));
+
+renderData();
+render(EXAMPLES[0]);
+show(location.hash === "#data" ? "data" : "search");
+</script>
